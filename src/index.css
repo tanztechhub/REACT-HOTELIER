@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap');
+
+/*
+  HOTELIER design tokens.
+  Brand colors are derived from the TANZ parent-company mark:
+  navy (wordmark), circuit blue -> green gradient (hexagon/icon).
+  Semantic tokens are defined as plain CSS custom properties on
+  :root / .dark, then re-exposed to Tailwind via @theme so utilities
+  like bg-primary, text-muted-foreground, border-border, etc. "just work".
+*/
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #0b1220;
+
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+
+  --popover: #ffffff;
+  --popover-foreground: #0b1220;
+
+  --primary: #0b1e3d;
+  --primary-foreground: #f7f9fc;
+
+  --secondary: #1c74d1;
+  --secondary-foreground: #ffffff;
+
+  --accent: #43a047;
+  --accent-foreground: #ffffff;
+
+  --muted: #eef1f5;
+  --muted-foreground: #616b7a;
+
+  --border: #e2e6ec;
+  --input: #e2e6ec;
+  --ring: #1c74d1;
+
+  --destructive: #d92d20;
+  --destructive-foreground: #ffffff;
+
+  --success: #1c9b5e;
+  --success-foreground: #ffffff;
+
+  --warning: #dc9a12;
+  --warning-foreground: #241a02;
+
+  --sidebar: #0b1e3d;
+  --sidebar-foreground: #e7ecf5;
+  --sidebar-muted: #94a3ba;
+  --sidebar-border: #1a2c52;
+  --sidebar-accent: #142a52;
+
+  --radius: 0.65rem;
+  --shadow-color: 220 40% 10%;
+}
+
+.dark {
+  --background: #0a0f1c;
+  --foreground: #e9edf5;
+
+  --card: #10182b;
+  --card-foreground: #e9edf5;
+
+  --popover: #10182b;
+  --popover-foreground: #e9edf5;
+
+  --primary: #4f8fe0;
+  --primary-foreground: #08132a;
+
+  --secondary: #2f7fd6;
+  --secondary-foreground: #ffffff;
+
+  --accent: #55b85b;
+  --accent-foreground: #06210b;
+
+  --muted: #161f33;
+  --muted-foreground: #8b96ab;
+
+  --border: #1e2942;
+  --input: #1e2942;
+  --ring: #4f8fe0;
+
+  --destructive: #f04438;
+  --destructive-foreground: #ffffff;
+
+  --success: #2fbf7c;
+  --success-foreground: #04170e;
+
+  --warning: #f2b94a;
+  --warning-foreground: #241a02;
+
+  --sidebar: #060a15;
+  --sidebar-foreground: #dde4f0;
+  --sidebar-muted: #7c8aa3;
+  --sidebar-border: #141d33;
+  --sidebar-accent: #101a30;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-display: "Jost", sans-serif;
+  --font-sans: "Jost", sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-secondary) 30%, transparent);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 999px;
+  }
+}
