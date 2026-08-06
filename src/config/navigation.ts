@@ -40,7 +40,7 @@ export const navigation: NavGroup[] = [
       { label: 'Kitchen', href: '/kitchen', icon: LuChefHat, moduleKey: 'KITCHEN' },
       { label: 'Bar & Lounge', href: '/bar-lounge', icon: LuWine, moduleKey: 'BAR_LOUNGE' },
       { label: 'Rooms', href: '/rooms', icon: LuBedDouble, moduleKey: 'ROOMS' },
-      { label: 'Reservations', href: '/reservations', icon: LuCalendarCheck, moduleKey: 'RESERVATIONS' },
+      { label: 'Reception', href: '/reservations', icon: LuCalendarCheck, moduleKey: 'RESERVATIONS' },
       { label: 'Housekeeping', href: '/housekeeping', icon: LuSparkles, moduleKey: 'HOUSEKEEPING' },
     ],
   },
