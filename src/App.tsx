@@ -8,6 +8,9 @@ import Kitchen from '@/pages/Kitchen'
 import Reception from '@/pages/Reception'
 import Rooms from '@/pages/Rooms'
 import Housekeeping from '@/pages/Housekeeping'
+import InventoryWorkspace from '@/pages/InventoryWorkspace'
+import Products from '@/pages/Products'
+import Users from '@/pages/Users'
 import { navigation } from '@/config/navigation'
 
 const moduleRoutes = navigation
@@ -25,6 +28,9 @@ function App() {
         <Route path="/reservations" element={<Reception />} />
         <Route path="/rooms" element={<Rooms />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
+        <Route path="/store" element={<InventoryWorkspace view="stores" />} />
+        <Route path="/products" element={<Products />} />
+        <Route path="/users" element={<Users />} />
         {moduleRoutes.map((item) => (
           <Route key={item.href} path={item.href} element={<ModulePlaceholder />} />
         ))}
