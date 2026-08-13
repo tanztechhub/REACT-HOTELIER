@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { LuBell, LuMessageSquare, LuUser, LuSettings, LuLogOut, LuChevronDown } from 'react-icons/lu'
 import { cn } from '@/lib/utils'
+import { IoPersonCircleSharp } from 'react-icons/io5'
 
 const CURRENT_USER = {
   name: 'Evans Nyongesa',
@@ -59,10 +60,10 @@ export default function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="ml-2 flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 transition-colors hover:bg-muted"
+        className="ml-2 flex items-center gap-1 rounded-full py-0.5 pl-0.5 pr-1.5 transition-colors hover:bg-muted cursor-pointer"
       >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-gray-400 text-[13px] font-semibold text-white">
-          
+        <span>
+          <IoPersonCircleSharp size={40} />
         </span>
         <LuChevronDown className={cn('size-3.5 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
