@@ -53,7 +53,7 @@ export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-7xl px-6 pb-8 pt-2 sm:px-8 lg:px-10">
       <header className="mb-8">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
           01 &middot; Daily Focus
