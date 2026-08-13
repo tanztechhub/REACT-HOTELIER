@@ -184,6 +184,20 @@
 }
 
 @layer utilities {
+  .input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-background);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+  }
+
+  .input:focus {
+    box-shadow: 0 0 0 2px var(--color-ring);
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;

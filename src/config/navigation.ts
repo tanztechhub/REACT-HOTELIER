@@ -14,6 +14,7 @@ import {
   LuWallet,
   LuChartColumn,
   LuSettings,
+  LuUserCog,
 } from 'react-icons/lu'
 
 export interface NavItem {
@@ -62,6 +63,9 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'System',
-    items: [{ label: 'Settings', href: '/settings', icon: LuSettings }],
+    items: [
+      { label: 'Users', href: '/users', icon: LuUserCog },
+      { label: 'Settings', href: '/settings', icon: LuSettings },
+    ],
   },
 ]
