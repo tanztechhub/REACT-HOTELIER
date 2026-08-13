@@ -12,7 +12,7 @@
 */
 
 :root {
-  --background: #f7f8fa;
+  --background: #eceef2;
   --foreground: #0b1220;
 
   --card: #ffffff;
@@ -48,9 +48,9 @@
 
   --sidebar: #0b1e3d;
   --sidebar-foreground: #e7ecf5;
-  --sidebar-muted: #94a3ba;
-  --sidebar-border: #1a2c52;
-  --sidebar-accent: #142a52;
+  --sidebar-muted: #a6b8e0;
+  --sidebar-border: #22386e;
+  --sidebar-accent: #1c3f82;
 
   --radius: 0.65rem;
   --shadow-color: 220 40% 10%;
@@ -197,5 +197,14 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: var(--color-border);
     border-radius: 999px;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

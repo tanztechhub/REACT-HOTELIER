@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { cn } from '@/lib/utils'
-import Logomark from '@/components/brand/Logomark'
 
 const EXPANDED_WIDTH = 264
 const COLLAPSED_WIDTH = 80
@@ -25,7 +24,7 @@ export default function Sidebar() {
           collapsed && 'justify-center px-0',
         )}
       >
-        <Logomark className="size-8 shrink-0" />
+        <img src="/PRIMARY.png" alt="Hotelier" className="size-10 shrink-0 rounded-md object-contain" />
         <AnimatePresence initial={false}>
           {!collapsed && (
             <motion.div
@@ -47,7 +46,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
+      <nav className="scrollbar-none flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
         {navigation.map((group) => (
           <div key={group.label} className="mb-5 last:mb-0">
             <AnimatePresence initial={false}>
@@ -56,22 +55,31 @@ export default function Sidebar() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden px-3 text-[10.5px] font-semibold uppercase tracking-wider text-sidebar-muted"
+                  className="overflow-hidden px-3 text-[10.5px] font-semibold uppercase tracking-wider text-white/80"
                 >
                   {group.label}
                 </motion.p>
               )}
             </AnimatePresence>
-            <ul className={cn('flex flex-col gap-0.5', !collapsed && 'mt-1.5')}>
+            <ul
+              className={cn(
+                'flex flex-col gap-0.5',
+                !collapsed && 'relative mt-1.5',
+              )}
+            >
+              {!collapsed && group.items.length > 1 && (
+                <span className="absolute bottom-3.5 top-3.5 left-[12px] w-px bg-sidebar-border" />
+              )}
               {group.items.map((item) => (
-                <li key={item.href}>
+                <li key={item.href} className="relative">
                   <NavLink
                     to={item.href}
                     end={item.href === '/'}
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(
-                        'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
+                        'group relative flex items-center gap-3 rounded-lg py-2 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
+                        !collapsed && (group.items.length > 1 ? 'pl-7 pr-3' : 'px-3'),
                         collapsed && 'justify-center px-0 py-2.5',
                         isActive && 'bg-sidebar-accent text-white',
                       )
@@ -79,11 +87,14 @@ export default function Sidebar() {
                   >
                     {({ isActive }) => (
                       <>
-                        {isActive && (
-                          <motion.span
-                            layoutId="sidebar-active-indicator"
-                            className="absolute left-0 h-5 w-[3px] rounded-r-full bg-secondary"
-                            transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+                        {!collapsed && group.items.length > 1 && (
+                          <span
+                            className={cn(
+                              'absolute left-[9px] size-[7px] shrink-0 rounded-full border-2 bg-sidebar transition-colors',
+                              isActive
+                                ? 'border-secondary'
+                                : 'border-sidebar-border group-hover:border-sidebar-muted',
+                            )}
                           />
                         )}
                         <item.icon className="size-[18px] shrink-0" />
