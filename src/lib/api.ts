@@ -1,3 +1,5 @@
+import { getSessionSnapshot } from '@/lib/session'
+
 const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
 const tenantId = import.meta.env.VITE_TENANT_ID ?? ''
 
@@ -7,11 +9,14 @@ export function hasApiTenant() {
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!tenantId) throw new Error('VITE_TENANT_ID is not configured. Run the Node seed command, then add its value to REACT/.env.')
+  const { token, userId } = getSessionSnapshot()
   const response = await fetch(`${apiUrl}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       'x-tenant-id': tenantId,
+      ...(userId ? { 'x-user-id': userId } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers,
     },
   })

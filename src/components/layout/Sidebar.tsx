@@ -24,7 +24,7 @@ export default function Sidebar() {
           collapsed && 'justify-center px-0',
         )}
       >
-        <img src="/PRIMARY.png" alt="Hotelier" className="size-10 shrink-0 rounded-md object-contain" />
+        <img src="/PRIMARY.png" alt="Hotelier" className="size-10 shrink-0 rounded-sm object-contain" />
         <AnimatePresence initial={false}>
           {!collapsed && (
             <motion.div
@@ -78,7 +78,7 @@ export default function Sidebar() {
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(
-                        'group relative flex items-center gap-3 rounded-lg py-2 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
+                        'group relative flex items-center gap-3 rounded-sm py-2 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
                         !collapsed && (group.items.length > 1 ? 'pl-7 pr-3' : 'px-3'),
                         collapsed && 'justify-center px-0 py-2.5',
                         isActive && 'bg-sidebar-accent text-white',
@@ -127,7 +127,7 @@ export default function Sidebar() {
           type="button"
           onClick={() => setCollapsed((v) => !v)}
           className={cn(
-            'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
+            'flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
             collapsed && 'justify-center px-0',
           )}
         >

@@ -8,7 +8,7 @@ export default function ModulePlaceholder() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-      <span className="mb-4 flex size-12 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
+      <span className="mb-4 flex size-12 items-center justify-center rounded-sm bg-secondary/10 text-secondary">
         <LuHammer className="size-5" />
       </span>
       <h1 className="font-display text-xl font-semibold text-foreground">

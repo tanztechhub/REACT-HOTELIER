@@ -1,21 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LuBell, LuMessageSquare, LuUser, LuSettings, LuLogOut, LuChevronDown } from 'react-icons/lu'
 import { cn } from '@/lib/utils'
 import { IoPersonCircleSharp } from 'react-icons/io5'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { logout } from '@/store/authSlice'
 
-const CURRENT_USER = {
-  name: 'Evans Nyongesa',
-  role: 'Manager',
-  initials: 'EN',
-}
-
-const menuItems = [
-  { label: 'Profile', icon: LuUser },
-  { label: 'Settings', icon: LuSettings },
-  { label: 'Log out', icon: LuLogOut, destructive: true },
-]
+const roleLabel = (role: string) => role.toLowerCase().split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')
 
 export default function UserMenu() {
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+  const user = useAppSelector((s) => s.auth.user)
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
 
@@ -27,6 +23,16 @@ export default function UserMenu() {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
+
+  if (!user) return null
+
+  const displayName = `${user.firstName} ${user.lastName}`
+
+  const menuItems = [
+    { label: 'Profile', icon: LuUser, onClick: () => setOpen(false) },
+    { label: 'Settings', icon: LuSettings, onClick: () => setOpen(false) },
+    { label: 'Log out', icon: LuLogOut, destructive: true, onClick: () => { setOpen(false); void dispatch(logout()); navigate('/login', { replace: true }) } },
+  ]
 
   return (
     <div
@@ -53,8 +59,8 @@ export default function UserMenu() {
       <span className="mx-1.5 h-7 w-px bg-border" />
 
       <div className="flex flex-col items-end leading-tight">
-        <span className="text-[13.5px] font-semibold text-foreground">{CURRENT_USER.name}</span>
-        <span className="text-[11.5px] font-medium text-secondary">{CURRENT_USER.role}</span>
+        <span className="text-[13.5px] font-semibold text-foreground">{displayName}</span>
+        <span className="text-[11.5px] font-medium text-secondary">{roleLabel(user.role)}</span>
       </div>
 
       <button
@@ -69,16 +75,16 @@ export default function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-[calc(100%+8px)] w-48 overflow-hidden rounded-xl border border-border bg-card py-1.5 shadow-lg">
+        <div className="absolute right-0 top-[calc(100%+8px)] w-48 overflow-hidden rounded-sm border border-border bg-card py-1.5 shadow-lg">
           <div className="border-b border-border px-3.5 py-2.5">
-            <p className="text-[13px] font-semibold text-foreground">{CURRENT_USER.name}</p>
-            <p className="text-xs text-muted-foreground">{CURRENT_USER.role}</p>
+            <p className="text-[13px] font-semibold text-foreground">{displayName}</p>
+            <p className="text-xs text-muted-foreground">{roleLabel(user.role)}</p>
           </div>
           {menuItems.map((item) => (
             <button
               key={item.label}
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={item.onClick}
               className={cn(
                 'flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[13.5px] font-medium transition-colors hover:bg-muted',
                 item.destructive ? 'text-destructive' : 'text-foreground',

@@ -163,7 +163,7 @@ export default function Reception() {
   }
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
-      <header className="relative overflow-hidden rounded-3xl bg-linear-to-r from-primary to-secondary p-7 text-white shadow-xl">
+      <header className="relative overflow-hidden rounded-sm bg-linear-to-r from-primary to-secondary p-7 text-white shadow-xl">
         <p className="text-xs font-bold uppercase tracking-[.2em] text-white/60">
           Front desk
         </p>
@@ -194,7 +194,7 @@ export default function Reception() {
         />
       </section>
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <section className="overflow-hidden rounded-sm border bg-card shadow-sm">
           <div className="border-b p-5">
             <h2 className="font-display text-xl font-semibold">Reservations</h2>
             <p className="text-sm text-muted-foreground">
@@ -239,14 +239,14 @@ export default function Reception() {
                         {b.status === "BOOKED" ? (
                           <button
                             onClick={() => void status(b, "CHECKED_IN")}
-                            className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white"
+                            className="rounded-sm bg-primary px-3 py-2 text-xs font-bold text-white"
                           >
                             Check in
                           </button>
                         ) : b.status === "CHECKED_IN" ? (
                           <button
                             onClick={() => void status(b, "CHECKED_OUT")}
-                            className="rounded-lg bg-success px-3 py-2 text-xs font-bold text-white"
+                            className="rounded-sm bg-success px-3 py-2 text-xs font-bold text-white"
                           >
                             {working === b.id ? "Updating…" : "Check out"}
                           </button>
@@ -262,7 +262,7 @@ export default function Reception() {
         <aside className="space-y-5">
           <form
             onSubmit={addGuest}
-            className="rounded-2xl border bg-card p-5 shadow-sm"
+            className="rounded-sm border bg-card p-5 shadow-sm"
           >
             <h2 className="font-semibold">New guest</h2>
             <div className="mt-4 grid grid-cols-2 gap-2">
@@ -298,13 +298,13 @@ export default function Reception() {
                 onChange={(e) => setGuest({ ...guest, email: e.target.value })}
               />
             </div>
-            <button className="mt-3 flex w-full justify-center gap-2 rounded-xl border py-2.5 text-sm font-bold">
+            <button className="mt-3 flex w-full justify-center gap-2 rounded-sm border py-2.5 text-sm font-bold">
               <LuPlus /> Save guest
             </button>
           </form>
           <form
             onSubmit={addBooking}
-            className="rounded-2xl border bg-card p-5 shadow-sm"
+            className="rounded-sm border bg-card p-5 shadow-sm"
           >
             <h2 className="font-semibold">New reservation</h2>
             <div className="mt-4 space-y-2">
@@ -363,7 +363,7 @@ export default function Reception() {
                 )}
               </select>
               {selectedRoom && (
-                <div className="rounded-xl border border-secondary/20 bg-secondary/5 p-3">
+                <div className="rounded-sm border border-secondary/20 bg-secondary/5 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold">
@@ -407,7 +407,7 @@ export default function Reception() {
             </div>
             <button
               disabled={!available.length}
-              className="mt-3 flex w-full justify-center gap-2 rounded-xl bg-secondary py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              className="mt-3 flex w-full justify-center gap-2 rounded-sm bg-secondary py-2.5 text-sm font-bold text-white disabled:opacity-50"
             >
               <LuHotel /> Create booking
             </button>
@@ -427,7 +427,7 @@ function Stat({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+    <div className="rounded-sm border bg-card p-5 shadow-sm">
       <div className="flex justify-between text-secondary">
         <span className="text-xs font-bold uppercase text-muted-foreground">
           {label}
@@ -441,7 +441,7 @@ function Stat({
 function Msg({ text, error = false }: { text: string; error?: boolean }) {
   return (
     <div
-      className={`mt-5 flex items-center gap-2 rounded-xl p-3 text-sm ${error ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}
+      className={`mt-5 flex items-center gap-2 rounded-sm p-3 text-sm ${error ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}`}
     >
       {error ? <LuCircleAlert /> : <LuCheck />}
       {text}

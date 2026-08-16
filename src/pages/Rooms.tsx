@@ -340,7 +340,7 @@ export default function Rooms() {
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
-      <header className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#112947] via-primary to-secondary p-7 text-white shadow-xl shadow-primary/15">
+      <header className="relative overflow-hidden rounded-sm bg-linear-to-br from-[#112947] via-primary to-secondary p-7 text-white shadow-xl shadow-primary/15">
         <div className="absolute -right-14 -top-20 size-64 rounded-full bg-white/10 blur-3xl" />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -357,20 +357,20 @@ export default function Rooms() {
           </div>
           <button
             onClick={openCreate}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-primary shadow-lg"
+            className="flex items-center justify-center gap-2 rounded-sm bg-white px-4 py-2.5 text-sm font-bold text-primary shadow-lg"
           >
             <LuPlus /> Add room
           </button>
         </div>
       </header>
       {error && (
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
           <LuCircleAlert />
           {error}
         </div>
       )}
       {notice && (
-        <div className="mt-5 flex items-center gap-2 rounded-xl border border-success/25 bg-success/10 p-3 text-sm text-success">
+        <div className="mt-5 flex items-center gap-2 rounded-sm border border-success/25 bg-success/10 p-3 text-sm text-success">
           <LuCircleCheck />
           {notice}
         </div>
@@ -408,7 +408,7 @@ export default function Rooms() {
         />
       </section>
       <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap rounded-xl border bg-card p-1 shadow-sm">
+        <div className="flex flex-wrap rounded-sm border bg-card p-1 shadow-sm">
           {(
             [
               ["ALL", "All rooms"],
@@ -420,7 +420,7 @@ export default function Rooms() {
             <button
               key={value}
               onClick={() => setFilter(value)}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold ${filter === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"}`}
+              className={`rounded-sm px-4 py-2 text-sm font-semibold ${filter === value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted"}`}
             >
               {label}
             </button>
@@ -432,16 +432,16 @@ export default function Rooms() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Search rooms…"
-            className="w-full rounded-xl border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring sm:w-64"
+            className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring sm:w-64"
           />
         </label>
       </div>
       {loading ? (
-        <div className="mt-5 flex min-h-72 items-center justify-center gap-2 rounded-2xl border bg-card text-sm text-muted-foreground">
+        <div className="mt-5 flex min-h-72 items-center justify-center gap-2 rounded-sm border bg-card text-sm text-muted-foreground">
           <LuLoaderCircle className="animate-spin" /> Loading rooms…
         </div>
       ) : visibleRooms.length === 0 ? (
-        <div className="mt-5 rounded-2xl border border-dashed bg-card p-16 text-center text-sm text-muted-foreground">
+        <div className="mt-5 rounded-sm border border-dashed bg-card p-16 text-center text-sm text-muted-foreground">
           No rooms match this view.
         </div>
       ) : (
@@ -469,7 +469,7 @@ export default function Rooms() {
         >
           <form
             onSubmit={saveRoom}
-            className="w-full max-w-xl rounded-3xl border bg-card p-6 shadow-2xl"
+            className="w-full max-w-xl rounded-sm border bg-card p-6 shadow-2xl"
           >
             <p className="text-sm font-semibold text-secondary">
               {editing ? "Edit room" : "New room"}
@@ -516,7 +516,7 @@ export default function Rooms() {
                   </select>
                 </Field>
                 {roomTypes.find((type) => type.name === form.type) && (
-                  <div className="mt-2 rounded-xl bg-secondary/5 p-3 text-xs text-muted-foreground">
+                  <div className="mt-2 rounded-sm bg-secondary/5 p-3 text-xs text-muted-foreground">
                     <p>
                       {roomTypes.find((type) => type.name === form.type)
                         ?.description || "No description"}
@@ -588,13 +588,13 @@ export default function Rooms() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="rounded-xl border px-4 py-2.5 text-sm font-semibold"
+                className="rounded-sm border px-4 py-2.5 text-sm font-semibold"
               >
                 Cancel
               </button>
               <button
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                className="flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
               >
                 {saving && <LuLoaderCircle className="animate-spin" />}
                 {editing ? "Save changes" : "Create room"}
@@ -605,7 +605,7 @@ export default function Rooms() {
       )}
       <button
         onClick={() => setShowTypes(true)}
-        className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-xl"
+        className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-sm bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-xl"
       >
         <LuSettings2 /> Manage room types
       </button>
@@ -616,7 +616,7 @@ export default function Rooms() {
             if (event.target === event.currentTarget) setShowTypes(false);
           }}
         >
-          <div className="grid max-h-[90vh] w-full max-w-4xl gap-5 overflow-y-auto rounded-3xl bg-card p-6 shadow-2xl lg:grid-cols-[320px_1fr]">
+          <div className="grid max-h-[90vh] w-full max-w-4xl gap-5 overflow-y-auto rounded-sm bg-card p-6 shadow-2xl lg:grid-cols-[320px_1fr]">
             <form onSubmit={saveRoomType}>
               <p className="text-sm font-semibold text-secondary">
                 Admin customization
@@ -689,7 +689,7 @@ export default function Rooms() {
               <div className="mt-5 flex gap-2">
                 <button
                   disabled={saving}
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white"
+                  className="rounded-sm bg-primary px-4 py-2 text-sm font-bold text-white"
                 >
                   {editingType ? "Save type" : "Create type"}
                 </button>
@@ -697,7 +697,7 @@ export default function Rooms() {
                   <button
                     type="button"
                     onClick={resetTypeForm}
-                    className="rounded-xl border px-4 py-2 text-sm"
+                    className="rounded-sm border px-4 py-2 text-sm"
                   >
                     Cancel edit
                   </button>
@@ -716,7 +716,7 @@ export default function Rooms() {
               </div>
               <div className="mt-4 space-y-2">
                 {roomTypes.map((type) => (
-                  <article key={type.id} className="rounded-xl border p-4">
+                  <article key={type.id} className="rounded-sm border p-4">
                     <div className="flex justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
@@ -746,13 +746,13 @@ export default function Rooms() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => editRoomType(type)}
-                          className="rounded-lg p-2 text-secondary"
+                          className="rounded-sm p-2 text-secondary"
                         >
                           <LuPencil />
                         </button>
                         <button
                           onClick={() => void removeRoomType(type)}
-                          className="rounded-lg p-2 text-destructive"
+                          className="rounded-sm p-2 text-destructive"
                         >
                           <LuTrash2 />
                         </button>
@@ -791,7 +791,7 @@ function RoomCard({
         ? "bg-secondary"
         : "bg-warning";
   return (
-    <article className="group overflow-hidden rounded-2xl border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl">
+    <article className="group overflow-hidden rounded-sm border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl">
       <div className={`h-1.5 ${statusTone}`} />
       <div className="p-5">
         <div className="flex items-start justify-between">
@@ -809,20 +809,20 @@ function RoomCard({
           <div className="flex gap-1">
             <button
               onClick={onEdit}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"
+              className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"
             >
               <LuPencil />
             </button>
             <button
               onClick={onDelete}
-              className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              className="rounded-sm p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             >
               <LuTrash2 />
             </button>
           </div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-muted/60 p-3">
+          <div className="rounded-sm bg-muted/60 p-3">
             <p className="text-[10px] font-bold uppercase text-muted-foreground">
               Nightly rate
             </p>
@@ -830,7 +830,7 @@ function RoomCard({
               {formatKes(Number(room.nightlyRate))}
             </p>
           </div>
-          <div className="rounded-xl bg-muted/60 p-3">
+          <div className="rounded-sm bg-muted/60 p-3">
             <p className="text-[10px] font-bold uppercase text-muted-foreground">
               Capacity
             </p>
@@ -838,7 +838,7 @@ function RoomCard({
           </div>
         </div>
         {stay ? (
-          <div className="mt-4 rounded-xl border border-secondary/20 bg-secondary/5 p-3">
+          <div className="mt-4 rounded-sm border border-secondary/20 bg-secondary/5 p-3">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground">
@@ -860,7 +860,7 @@ function RoomCard({
             </div>
           </div>
         ) : (
-          <div className="mt-4 rounded-xl border border-dashed p-3 text-center text-xs text-muted-foreground">
+          <div className="mt-4 rounded-sm border border-dashed p-3 text-center text-xs text-muted-foreground">
             No checked-in guest
           </div>
         )}
@@ -868,7 +868,7 @@ function RoomCard({
           <select
             value={room.status}
             onChange={(e) => onStatus(e.target.value as RoomStatus)}
-            className="rounded-xl border bg-background px-2 py-2 text-xs font-semibold"
+            className="rounded-sm border bg-background px-2 py-2 text-xs font-semibold"
           >
             <option value="VACANT">Vacant</option>
             <option value="OCCUPIED">Occupied</option>
@@ -877,7 +877,7 @@ function RoomCard({
           <select
             value={room.cleanliness}
             onChange={(e) => onCleanliness(e.target.value as Cleanliness)}
-            className={`rounded-xl border px-2 py-2 text-xs font-semibold ${room.cleanliness === "CLEAN" ? "bg-success/10 text-success" : room.cleanliness === "DIRTY" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
+            className={`rounded-sm border px-2 py-2 text-xs font-semibold ${room.cleanliness === "CLEAN" ? "bg-success/10 text-success" : room.cleanliness === "DIRTY" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
           >
             <option value="CLEAN">Clean</option>
             <option value="DIRTY">Dirty</option>
@@ -901,13 +901,13 @@ function SummaryCard({
   tone: "success" | "secondary" | "warning";
 }) {
   return (
-    <div className="rounded-2xl border bg-card p-4 shadow-sm">
+    <div className="rounded-sm border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
           {label}
         </span>
         <span
-          className={`flex size-8 items-center justify-center rounded-lg ${tone === "success" ? "bg-success/10 text-success" : tone === "warning" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
+          className={`flex size-8 items-center justify-center rounded-sm ${tone === "success" ? "bg-success/10 text-success" : tone === "warning" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
         >
           {icon}
         </span>

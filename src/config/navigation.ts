@@ -40,6 +40,7 @@ import {
   LuBuilding2,
   LuSettings,
   LuUserCog,
+  LuBriefcaseBusiness,
 } from 'react-icons/lu'
 
 export interface NavItem {
@@ -157,6 +158,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'System',
     items: [
+      { label: 'Business Information', href: '/business-information', icon: LuBriefcaseBusiness },
       { label: 'Users', href: '/users', icon: LuUserCog },
       { label: 'Settings', href: '/settings', icon: LuSettings },
     ],

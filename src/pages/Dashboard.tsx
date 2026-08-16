@@ -72,14 +72,14 @@ export default function Dashboard() {
           return (
             <div
               key={stat.label}
-              className={cn('relative overflow-hidden rounded-xl p-5 shadow-sm', tone.bg)}
+              className={cn('relative overflow-hidden rounded-sm p-5 shadow-sm', tone.bg)}
             >
               <FingerprintRings className={cn('pointer-events-none absolute -right-2 -top-2 size-32', tone.ring)} />
               <div className="relative flex items-center justify-between">
                 <span className={cn('text-xs font-medium uppercase tracking-wide', tone.soft)}>
                   {stat.label}
                 </span>
-                <span className={cn('flex size-8 items-center justify-center rounded-lg', tone.badge, tone.fg)}>
+                <span className={cn('flex size-8 items-center justify-center rounded-sm', tone.badge, tone.fg)}>
                   <stat.icon className="size-4" />
                 </span>
               </div>
@@ -92,7 +92,7 @@ export default function Dashboard() {
         })}
       </section>
 
-      <section className="mt-8 rounded-xl border border-border bg-card p-6 shadow-sm">
+      <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="font-display text-base font-semibold text-foreground">
@@ -109,14 +109,14 @@ export default function Dashboard() {
             return (
               <div
                 key={mod.href}
-                className={`flex items-center gap-3 rounded-lg border px-3.5 py-3 ${
+                className={`flex items-center gap-3 rounded-sm border px-3.5 py-3 ${
                   enabled
                     ? 'border-border bg-background'
                     : 'border-dashed border-border bg-muted/40 opacity-60'
                 }`}
               >
                 <span
-                  className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${
+                  className={`flex size-8 shrink-0 items-center justify-center rounded-sm ${
                     enabled ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'
                   }`}
                 >
