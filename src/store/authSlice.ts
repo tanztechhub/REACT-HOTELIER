@@ -1,12 +1,16 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api } from '@/lib/api'
 
+export type AuthRole = { id: string; name: string; allowedSections: string[] }
+
 export type AuthUser = {
   id: string
   firstName: string
   lastName: string
-  email: string
-  role: string
+  employeeCode: string
+  jobTitle: string
+  department: string
+  role: AuthRole | null
 }
 
 export type AuthState = {
@@ -46,7 +50,7 @@ const initialState: AuthState = { ...readPersisted(), status: 'idle', error: nul
 
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials: { email: string; password: string }) => {
+  async (credentials: { employeeCode: string; pin: string }) => {
     const response = await api<{ token: string; expiresAt: string; user: AuthUser }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),

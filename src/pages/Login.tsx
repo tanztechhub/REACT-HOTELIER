@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useLocation, useNavigate, Navigate } from 'react-router-dom'
-import { LuCircleAlert, LuLoaderCircle, LuLock, LuMail } from 'react-icons/lu'
+import { LuCircleAlert, LuIdCard, LuLoaderCircle, LuLock } from 'react-icons/lu'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { login } from '@/store/authSlice'
 import { fetchTenantContext } from '@/store/tenantSlice'
@@ -13,8 +13,8 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAppSelector((s) => s.auth.user)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [employeeCode, setEmployeeCode] = useState('')
+  const [pin, setPin] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,12 +28,12 @@ export default function Login() {
     setSaving(true)
     setError('')
     try {
-      await dispatch(login({ email, password })).unwrap()
+      await dispatch(login({ employeeCode, pin })).unwrap()
       void dispatch(fetchTenantContext())
       const redirectTo = (location.state as { from?: Location })?.from?.pathname ?? '/'
       navigate(redirectTo, { replace: true })
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Incorrect email or password'
+      const message = cause instanceof Error ? cause.message : 'Incorrect employee code or PIN'
       setError(message)
       toast.error(message)
     } finally {
@@ -84,7 +84,7 @@ export default function Login() {
         <div className="w-full max-w-sm">
           <p className="text-sm font-semibold text-secondary">Login Account</p>
           <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">Sign in to your workspace</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Enter your email and password to continue.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Enter your employee code and PIN to continue.</p>
 
           {error && (
             <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
@@ -95,31 +95,32 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <label className="block text-sm font-medium">
-              Email
+              Employee Code
               <span className="relative mt-1.5 block">
-                <LuMail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <LuIdCard className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   required
-                  type="email"
-                  autoComplete="email"
-                  placeholder="e.g. admin@hotel.co.ke"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text"
+                  autoComplete="username"
+                  placeholder="e.g. EMP-0007"
+                  value={employeeCode}
+                  onChange={(e) => setEmployeeCode(e.target.value)}
                   className="input pl-9!"
                 />
               </span>
             </label>
             <label className="block text-sm font-medium">
-              Password
+              PIN
               <span className="relative mt-1.5 block">
                 <LuLock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <input
                   required
                   type="password"
+                  inputMode="numeric"
                   autoComplete="current-password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your PIN"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
                   className="input pl-9!"
                 />
               </span>

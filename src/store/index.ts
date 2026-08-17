@@ -12,7 +12,8 @@ export const store = configureStore({
 
 const syncSessionSnapshot = () => {
   const { token, user } = store.getState().auth
-  setSessionSnapshot({ token, userId: user?.id ?? null })
+  const { tenantId } = store.getState().tenant
+  setSessionSnapshot({ token, userId: user?.id ?? null, tenantId: tenantId || null })
 }
 
 syncSessionSnapshot()

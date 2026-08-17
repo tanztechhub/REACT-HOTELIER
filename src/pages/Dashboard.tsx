@@ -1,8 +1,7 @@
 import { LuTrendingUp, LuBedDouble, LuReceipt, LuUsers, LuLock } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { cn } from '@/lib/utils'
-
-const DUMMY_USER = 'Evans'
+import { useAppSelector } from '@/store/hooks'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -51,6 +50,8 @@ function FingerprintRings({ className }: { className?: string }) {
 
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
+  const user = useAppSelector((s) => s.auth.user)
+  const firstName = user?.firstName ?? 'there'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -62,7 +63,7 @@ export default function Dashboard() {
           Dashboard
         </h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          {getGreeting()}, {DUMMY_USER} &mdash; here&apos;s what&apos;s happening across your property today.
+          {getGreeting()}, {firstName} &mdash; here&apos;s what&apos;s happening across your property today.
         </p>
       </header>
 

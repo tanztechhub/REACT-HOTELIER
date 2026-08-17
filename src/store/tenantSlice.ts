@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api } from '@/lib/api'
+import { resolveTenant as resolveTenantRequest } from '@/lib/tenant'
 
 export type BusinessProfile = {
   businessName: string
@@ -21,17 +22,27 @@ export type License = {
 
 export type TenantState = {
   tenantId: string
+  tenantName: string
+  tenantSlug: string
+  resolved: boolean
+  resolveError: string | null
   businessProfile: BusinessProfile
   license: License
   loaded: boolean
 }
 
 const initialState: TenantState = {
-  tenantId: import.meta.env.VITE_TENANT_ID ?? '',
+  tenantId: '',
+  tenantName: '',
+  tenantSlug: '',
+  resolved: false,
+  resolveError: null,
   businessProfile: null,
   license: null,
   loaded: false,
 }
+
+export const resolveTenant = createAsyncThunk('tenant/resolve', async () => resolveTenantRequest())
 
 export const fetchTenantContext = createAsyncThunk('tenant/fetchContext', async () => {
   const [profileRes, licenseRes] = await Promise.all([
@@ -52,11 +63,23 @@ const tenantSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
-    builder.addCase(fetchTenantContext.fulfilled, (state, action) => {
-      state.businessProfile = action.payload.businessProfile
-      state.license = action.payload.license
-      state.loaded = true
-    })
+    builder
+      .addCase(resolveTenant.fulfilled, (state, action) => {
+        state.tenantId = action.payload.tenantId
+        state.tenantName = action.payload.name
+        state.tenantSlug = action.payload.slug
+        state.resolved = true
+        state.resolveError = null
+      })
+      .addCase(resolveTenant.rejected, (state, action) => {
+        state.resolved = true
+        state.resolveError = action.error.message ?? 'This workspace could not be found.'
+      })
+      .addCase(fetchTenantContext.fulfilled, (state, action) => {
+        state.businessProfile = action.payload.businessProfile
+        state.license = action.payload.license
+        state.loaded = true
+      })
   },
 })
 

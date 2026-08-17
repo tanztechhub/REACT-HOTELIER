@@ -6,8 +6,6 @@ import { IoPersonCircleSharp } from 'react-icons/io5'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { logout } from '@/store/authSlice'
 
-const roleLabel = (role: string) => role.toLowerCase().split('_').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')
-
 export default function UserMenu() {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
@@ -60,7 +58,7 @@ export default function UserMenu() {
 
       <div className="flex flex-col items-end leading-tight">
         <span className="text-[13.5px] font-semibold text-foreground">{displayName}</span>
-        <span className="text-[11.5px] font-medium text-secondary">{roleLabel(user.role)}</span>
+        <span className="text-[11.5px] font-medium text-secondary">{user.role?.name ?? user.jobTitle}</span>
       </div>
 
       <button
@@ -78,7 +76,7 @@ export default function UserMenu() {
         <div className="absolute right-0 top-[calc(100%+8px)] w-48 overflow-hidden rounded-sm border border-border bg-card py-1.5 shadow-lg">
           <div className="border-b border-border px-3.5 py-2.5">
             <p className="text-[13px] font-semibold text-foreground">{displayName}</p>
-            <p className="text-xs text-muted-foreground">{roleLabel(user.role)}</p>
+            <p className="text-xs text-muted-foreground">{user.role?.name ?? user.jobTitle}</p>
           </div>
           {menuItems.map((item) => (
             <button
