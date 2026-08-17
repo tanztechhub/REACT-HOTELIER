@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { login } from '@/store/authSlice'
 import { fetchTenantContext } from '@/store/tenantSlice'
 import { useToast } from '@/components/ui/Toast'
+import { getErrorMessage } from '@/lib/errors'
 
 export default function Login() {
   const dispatch = useAppDispatch()
@@ -33,7 +34,7 @@ export default function Login() {
       const redirectTo = (location.state as { from?: Location })?.from?.pathname ?? '/'
       navigate(redirectTo, { replace: true })
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Incorrect employee code or PIN'
+      const message = getErrorMessage(cause, 'Incorrect employee code or PIN')
       setError(message)
       toast.error(message)
     } finally {
