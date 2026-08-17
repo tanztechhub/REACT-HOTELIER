@@ -146,7 +146,8 @@ export const navigation: NavGroup[] = [
     label: 'Inventory',
     section: 'INVENTORY',
     items: [
-      { label: 'Categories', href: '/inventory/categories', icon: LuTags, moduleKey: 'INVENTORY' },
+      { label: 'Categories', href: '/inventory/categories', icon: LuTags, moduleKey: 'STORE' },
+      { label: 'Products', href: '/products', icon: LuPackage, moduleKey: 'PRODUCTS' },
       { label: 'Store', href: '/store', icon: LuWarehouse, moduleKey: 'STORE' },
       { label: 'Assets', href: '/inventory/assets', icon: LuBox },
       { label: 'Stock Ledger', href: '/inventory/stock-ledger', icon: LuBookOpen },

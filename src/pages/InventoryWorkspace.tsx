@@ -1,25 +1,173 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { LuPackage, LuPlus, LuWarehouse } from 'react-icons/lu'
+import { LuCircleAlert, LuCircleCheck, LuLoaderCircle, LuPackage, LuPencil, LuPlus, LuTrash2, LuWarehouse } from 'react-icons/lu'
+import { api } from '@/lib/api'
+import { useToast } from '@/components/ui/Toast'
+import { cn } from '@/lib/utils'
 
-type Store = { id: string; name: string; code: string; active: boolean }
-type Product = { id: string; name: string; sku: string; store: string; quantity: number; reorder: number; unit: string }
-const initialStores: Store[] = [{ id: 'main', name: 'Main Store', code: 'MAIN', active: true }, { id: 'bar', name: 'Bar Store', code: 'BAR', active: true }, { id: 'bakery', name: 'Bakery Store', code: 'BAKERY', active: true }]
-const initialProducts: Product[] = [{ id: 'milk', name: 'Fresh Milk', sku: 'MLK-001', store: 'Main Store', quantity: 18, reorder: 8, unit: 'litres' }, { id: 'coffee', name: 'Arabica Coffee Beans', sku: 'COF-001', store: 'Main Store', quantity: 6, reorder: 5, unit: 'kg' }, { id: 'flour', name: 'Baking Flour', sku: 'BAK-001', store: 'Bakery Store', quantity: 25, reorder: 10, unit: 'kg' }, { id: 'butter', name: 'Unsalted Butter', sku: 'BAK-002', store: 'Bakery Store', quantity: 12, reorder: 5, unit: 'kg' }, { id: 'chocolate', name: 'Baking Chocolate', sku: 'BAK-003', store: 'Bakery Store', quantity: 8, reorder: 3, unit: 'kg' }, { id: 'yeast', name: 'Dry Yeast', sku: 'BAK-004', store: 'Bakery Store', quantity: 2, reorder: 1, unit: 'kg' }, { id: 'sugar', name: 'Caster Sugar', sku: 'BAK-005', store: 'Bakery Store', quantity: 15, reorder: 5, unit: 'kg' }, { id: 'pastry-boxes', name: 'Pastry Boxes', sku: 'BAK-006', store: 'Bakery Store', quantity: 80, reorder: 30, unit: 'each' }]
-const recentMovements = [{ product: 'Fresh Milk', type: 'Receipt', quantity: '+24 litres', by: 'Store Keeper', at: '07 Aug 2026, 10:24' }, { product: 'Arabica Coffee Beans', type: 'Dispatch', quantity: '-2 kg', by: 'Barista', at: '07 Aug 2026, 09:10' }]
+type Store = { id: string; name: string; code: string; isActive: boolean; _count: { products: number } }
+type StoreForm = { name: string; code: string; isActive: boolean }
+const emptyForm: StoreForm = { name: '', code: '', isActive: true }
 
-export default function InventoryWorkspace({ view }: { view: 'stores' | 'products' }) {
-  const [stores, setStores] = useState(initialStores)
-  const [products, setProducts] = useState(initialProducts)
-  const [name, setName] = useState('')
-  const [code, setCode] = useState('')
-  const [quantity, setQuantity] = useState('0')
-  const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
-  const isStores = view === 'stores'
-  function add(event: FormEvent) { event.preventDefault(); if (!name.trim()) return; if (isStores) { setStores((current) => [...current, { id: `${Date.now()}`, name: name.trim(), code: code.trim().toUpperCase() || name.trim().slice(0, 4).toUpperCase(), active: true }]) } else { setProducts((current) => [...current, { id: `${Date.now()}`, name: name.trim(), sku: code.trim().toUpperCase() || `SKU-${Date.now()}`, store: stores[0]?.name ?? 'Main Store', quantity: Number(quantity), reorder: 5, unit: 'each' }]) } setName(''); setCode(''); setQuantity('0') }
-  function saveStore(store: Store, event: FormEvent<HTMLFormElement>) { event.preventDefault(); const fields = new FormData(event.currentTarget); const nextName = String(fields.get('name')).trim(); const nextCode = String(fields.get('code')).trim().toUpperCase(); if (!nextName || !nextCode) return; setStores((current) => current.map((item) => item.id === store.id ? { ...item, name: nextName, code: nextCode } : item)); setProducts((current) => current.map((item) => item.store === store.name ? { ...item, store: nextName } : item)); setEditingStoreId(null) }
-  function deleteStore(store: Store) { if (products.some((product) => product.store === store.name)) { window.alert('Move or delete this store’s products before deleting the store.'); return; } setStores((current) => current.filter((item) => item.id !== store.id)) }
-  return <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10"><header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium text-secondary">Inventory</p><h1 className="mt-1 font-display text-2xl font-semibold">{isStores ? 'Store management' : 'Products and stock'}</h1><p className="mt-1 text-sm text-muted-foreground">{isStores ? 'Create, update, activate, or remove stock locations.' : 'Track ingredients, on-hand quantity, and low-stock reorder levels.'}</p></div><form onSubmit={add} className="flex flex-wrap gap-2 rounded-sm border bg-card p-3 shadow-sm"><input required value={name} onChange={(e) => setName(e.target.value)} placeholder={isStores ? 'Store name' : 'Ingredient name'} className="rounded-sm border bg-background px-3 py-2 text-sm" /><input value={code} onChange={(e) => setCode(e.target.value)} placeholder={isStores ? 'Store code' : 'SKU'} className="w-28 rounded-sm border bg-background px-3 py-2 text-sm" />{!isStores && <input type="number" min="0" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Qty" className="w-20 rounded-sm border bg-background px-3 py-2 text-sm" />}<button className="flex items-center gap-1 rounded-sm bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"><LuPlus />Add</button></form></header>{isStores ? <><section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{stores.map((store) => <article key={store.id} className="rounded-sm border bg-card p-5 shadow-sm"><LuWarehouse className="text-secondary" />{editingStoreId === store.id ? <form onSubmit={(event) => saveStore(store, event)} className="mt-4 space-y-2"><input name="name" defaultValue={store.name} className="w-full rounded-sm border bg-background px-3 py-2 text-sm" /><input name="code" defaultValue={store.code} className="w-full rounded-sm border bg-background px-3 py-2 font-mono text-sm" /><div className="flex gap-2"><button className="rounded-sm bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Save</button><button type="button" onClick={() => setEditingStoreId(null)} className="rounded-sm border px-3 py-1.5 text-xs">Cancel</button></div></form> : <><h2 className="mt-4 font-semibold">{store.name}</h2><p className="mt-1 font-mono text-xs text-muted-foreground">{store.code}</p><div className="mt-4 flex items-center justify-between"><span className="text-sm text-muted-foreground">{products.filter((product) => product.store === store.name).length} ingredients</span><button onClick={() => setStores((current) => current.map((item) => item.id === store.id ? { ...item, active: !item.active } : item))} className={`rounded-full px-2.5 py-1 text-xs font-medium ${store.active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>{store.active ? 'Active' : 'Inactive'}</button></div><div className="mt-4 flex gap-2"><button onClick={() => setEditingStoreId(store.id)} className="rounded-sm border px-3 py-1.5 text-xs font-medium">Edit</button><button onClick={() => deleteStore(store)} className="rounded-sm border border-destructive/30 px-3 py-1.5 text-xs font-medium text-destructive">Delete</button></div></>}</article>)}</section><StoreActivity /></> : <><section className="mt-7 rounded-sm border border-secondary/20 bg-secondary/5 p-4 text-sm text-secondary"><strong>Ingredient stock only:</strong> add inputs such as milk, coffee beans, tea, syrups, fruit, ice and cups here. Create finished drinks like latte or lemonade in the Menu module, then attach their ingredient recipe.</section><section className="mt-4 overflow-hidden rounded-sm border bg-card shadow-sm"><table className="w-full text-left text-sm"><thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3">Ingredient</th><th className="px-5 py-3">Store</th><th className="px-5 py-3">On hand</th><th className="px-5 py-3">Reorder level</th><th className="px-5 py-3">Status</th></tr></thead><tbody>{products.map((product) => { const low = product.quantity <= product.reorder; return <tr key={product.id} className="border-t"><td className="px-5 py-4"><span className="font-medium">{product.name}</span><span className="ml-2 font-mono text-xs text-muted-foreground">{product.sku}</span></td><td className="px-5 py-4">{product.store}</td><td className="px-5 py-4">{product.quantity} {product.unit}</td><td className="px-5 py-4">{product.reorder} {product.unit}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${low ? 'bg-warning/15 text-warning' : 'bg-success/10 text-success'}`}>{low ? 'Reorder now' : 'In stock'}</span></td></tr> })}</tbody></table></section><StoreActivity /></>}<p className="mt-5 flex items-center gap-2 text-sm text-muted-foreground"><LuPackage /> POS and Kitchen menu items consume these ingredients through their recipes.</p></div>
+export default function InventoryWorkspace() {
+  const toast = useToast()
+  const [stores, setStores] = useState<Store[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [form, setForm] = useState<StoreForm>(emptyForm)
+  const [editing, setEditing] = useState<Store | null>(null)
+  const [showForm, setShowForm] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api<{ stores: Store[] }>('/stores')
+      setStores(response.stores)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not load stores'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => { void load() }, [load])
+
+  function openCreate() {
+    setEditing(null)
+    setForm(emptyForm)
+    setError('')
+    setShowForm(true)
+  }
+
+  function openEdit(store: Store) {
+    setEditing(store)
+    setForm({ name: store.name, code: store.code, isActive: store.isActive })
+    setError('')
+    setShowForm(true)
+  }
+
+  async function saveStore(event: FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    setNotice('')
+    try {
+      await api(editing ? `/stores/${editing.id}` : '/stores', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(form) })
+      setNotice(editing ? 'Store updated.' : 'Store created.')
+      toast.success(editing ? 'Store updated.' : 'Store created.')
+      setShowForm(false)
+      await load()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not save store'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteStore(store: Store) {
+    if (!window.confirm(`Delete "${store.name}"?`)) return
+    setError('')
+    setNotice('')
+    try {
+      await api(`/stores/${store.id}`, { method: 'DELETE' })
+      setNotice('Store deleted.')
+      toast.success('Store deleted.')
+      await load()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not delete store'
+      setError(message)
+      toast.error(message)
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-8 sm:px-8 lg:px-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-secondary">Inventory</p>
+          <h1 className="mt-1 font-display text-3xl font-semibold">Store</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Manage the physical stock locations products are received into.</p>
+        </div>
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <LuPlus /> Add store
+        </button>
+      </header>
+
+      {error && (
+        <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
+          <LuCircleAlert />
+          {error}
+        </div>
+      )}
+      {notice && (
+        <div className="mt-5 flex items-center gap-2 rounded-sm border border-success/25 bg-success/10 p-3 text-sm text-success">
+          <LuCircleCheck />
+          {notice}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading stores…</div>
+      ) : stores.length === 0 ? (
+        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No stores yet. Add your first one to start receiving products.</div>
+      ) : (
+        <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {stores.map((store) => (
+            <article key={store.id} className="rounded-sm border bg-card p-5 shadow-sm">
+              <div className="flex items-start justify-between">
+                <span className="flex size-9 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuWarehouse className="size-4" /></span>
+                <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', store.isActive ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground')}>{store.isActive ? 'Active' : 'Inactive'}</span>
+              </div>
+              <h2 className="mt-4 font-semibold">{store.name}</h2>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{store.code}</p>
+              <div className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+                <LuPackage className="size-4" /> {store._count.products} product{store._count.products === 1 ? '' : 's'}
+              </div>
+              <div className="mt-4 flex gap-2">
+                <button onClick={() => openEdit(store)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Edit</button>
+                <button onClick={() => void deleteStore(store)} className="inline-flex items-center gap-1.5 rounded-sm border border-destructive/30 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10"><LuTrash2 className="size-3.5" /> Delete</button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false) }}>
+          <form onSubmit={saveStore} className="w-full max-w-md rounded-sm border bg-card p-6 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-secondary">{editing ? 'Edit store' : 'New store'}</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold">{editing ? editing.name : 'Add a store'}</h2>
+            </div>
+            <div className="mt-6 space-y-4">
+              <label className="block text-sm font-medium">Name <span className="text-destructive">*</span>
+                <span className="mt-1.5 block"><input required placeholder="e.g. Main Store" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" /></span>
+              </label>
+              <label className="block text-sm font-medium">Code <span className="text-destructive">*</span>
+                <span className="mt-1.5 block"><input required placeholder="e.g. MAIN" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} className="input" /></span>
+              </label>
+              <label className="flex items-center justify-between rounded-sm border bg-background px-3 py-2.5 text-sm font-medium">
+                Active
+                <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} className="size-4 accent-secondary" />
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+              <button disabled={saving} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+                {saving && <LuLoaderCircle className="animate-spin" />}
+                {editing ? 'Save changes' : 'Create store'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  )
 }
-
-function StoreActivity() { return <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm"><div className="border-b px-5 py-4"><h2 className="font-semibold">Store activity</h2><p className="mt-0.5 text-sm text-muted-foreground">Receipts and dispatches across this store, with date and time.</p></div><table className="w-full text-left text-sm"><thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3">Product</th><th className="px-5 py-3">Movement</th><th className="px-5 py-3">Quantity</th><th className="px-5 py-3">By</th><th className="px-5 py-3">Date & time</th></tr></thead><tbody>{recentMovements.map((movement) => <tr key={`store-${movement.product}-${movement.at}`} className="border-t"><td className="px-5 py-3 font-medium">{movement.product}</td><td className="px-5 py-3">{movement.type}</td><td className={`px-5 py-3 font-medium ${movement.type === 'Receipt' ? 'text-success' : 'text-warning'}`}>{movement.quantity}</td><td className="px-5 py-3">{movement.by}</td><td className="px-5 py-3 text-muted-foreground">{movement.at}</td></tr>)}</tbody></table></section> }

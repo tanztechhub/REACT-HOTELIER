@@ -18,6 +18,7 @@ import Users from '@/pages/Users'
 import BusinessInformation from '@/pages/BusinessInformation'
 import Employees from '@/pages/Employees'
 import RolesAndPermissions from '@/pages/RolesAndPermissions'
+import Categories from '@/pages/Categories'
 import { navigation, sectionForPath, type PermissionSection } from '@/config/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { restoreSession } from '@/store/authSlice'
@@ -103,8 +104,9 @@ function App() {
         <Route path="/reservations" element={<Reception />} />
         <Route path="/rooms" element={<Rooms />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
-        <Route path="/store" element={<InventoryWorkspace view="stores" />} />
+        <Route path="/store" element={<InventoryWorkspace />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/inventory/categories" element={<Categories />} />
         <Route path="/users" element={<Users />} />
         <Route path="/business-information" element={<BusinessInformation />} />
         <Route path="/team/employees" element={<Employees />} />
