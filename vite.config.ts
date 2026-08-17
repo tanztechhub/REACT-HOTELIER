@@ -13,7 +13,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
       manifest: {
-        name: 'HOTELIER — Hotel Management by TANZ',
+        name: 'HOTELIER',
         short_name: 'HOTELIER',
         description: 'Modular, multi-tenant hotel management platform by TANZ.',
         theme_color: '#0B1E3D',
