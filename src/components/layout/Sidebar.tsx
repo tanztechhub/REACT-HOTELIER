@@ -2,14 +2,18 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
-import { navigation } from '@/config/navigation'
+import { navigation, type PermissionSection } from '@/config/navigation'
 import { cn } from '@/lib/utils'
+import { useAppSelector } from '@/store/hooks'
 
 const EXPANDED_WIDTH = 264
 const COLLAPSED_WIDTH = 80
+const DEFAULT_SECTIONS: PermissionSection[] = ['OVERVIEW']
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
+  const allowedSections = useAppSelector((s) => s.auth.user?.role?.allowedSections) ?? DEFAULT_SECTIONS
+  const visibleNavigation = navigation.filter((group) => allowedSections.includes(group.section))
 
   return (
     <motion.aside
@@ -47,7 +51,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
-        {navigation.map((group) => (
+        {visibleNavigation.map((group) => (
           <div key={group.label} className="mb-5 last:mb-0">
             <AnimatePresence initial={false}>
               {!collapsed && (

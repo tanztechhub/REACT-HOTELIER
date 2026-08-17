@@ -14,23 +14,7 @@ import {
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
-
-const sections = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
-type Section = (typeof sections)[number]
-
-const sectionLabels: Record<Section, string> = {
-  OVERVIEW: 'Overview',
-  RECEPTION: 'Reception',
-  HOUSEKEEPING: 'Housekeeping',
-  SALES: 'Sales',
-  KITCHEN: 'Kitchen',
-  SERVICE_CENTER: 'Service Center',
-  INVENTORY: 'Inventory',
-  TEAM: 'Team',
-  FINANCE: 'Finance',
-  REPORTS: 'Reports',
-  SYSTEM: 'System',
-}
+import { PERMISSION_SECTIONS as sections, sectionLabels, type PermissionSection as Section } from '@/config/navigation'
 
 type Role = {
   id: string

@@ -18,7 +18,7 @@ import Users from '@/pages/Users'
 import BusinessInformation from '@/pages/BusinessInformation'
 import Employees from '@/pages/Employees'
 import RolesAndPermissions from '@/pages/RolesAndPermissions'
-import { navigation } from '@/config/navigation'
+import { navigation, sectionForPath, type PermissionSection } from '@/config/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { restoreSession } from '@/store/authSlice'
 import { fetchTenantContext, resolveTenant } from '@/store/tenantSlice'
@@ -27,11 +27,26 @@ const moduleRoutes = navigation
   .flatMap((g) => g.items)
   .filter((item) => item.href !== '/')
 
+const DEFAULT_SECTIONS: PermissionSection[] = ['OVERVIEW']
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, expiresAt } = useAppSelector((s) => s.auth)
   const location = useLocation()
   const isValid = Boolean(user && expiresAt && expiresAt > Date.now())
   if (!isValid) return <Navigate to="/login" state={{ from: location }} replace />
+  return <>{children}</>
+}
+
+/** Blocks direct navigation to a route whose section isn't in the current
+ * user's role — the sidebar already hides these, this stops typing the URL
+ * from bypassing that. The Dashboard ("/") is always reachable so there's
+ * no possible redirect loop for a role missing OVERVIEW. */
+function SectionGuard({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const allowedSections = useAppSelector((s) => s.auth.user?.role?.allowedSections) ?? DEFAULT_SECTIONS
+  if (location.pathname === '/') return <>{children}</>
+  const section = sectionForPath(location.pathname)
+  if (section && !allowedSections.includes(section)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -80,7 +95,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+      <Route element={<ProtectedRoute><SectionGuard><AppShell /></SectionGuard></ProtectedRoute>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/settings" element={<CafeSettings />} />
         <Route path="/pos" element={<PointOfSale />} />

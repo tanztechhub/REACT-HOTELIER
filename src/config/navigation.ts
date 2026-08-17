@@ -43,6 +43,23 @@ import {
   LuBriefcaseBusiness,
 } from 'react-icons/lu'
 
+export const PERMISSION_SECTIONS = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
+export type PermissionSection = (typeof PERMISSION_SECTIONS)[number]
+
+export const sectionLabels: Record<PermissionSection, string> = {
+  OVERVIEW: 'Overview',
+  RECEPTION: 'Reception',
+  HOUSEKEEPING: 'Housekeeping',
+  SALES: 'Sales',
+  KITCHEN: 'Kitchen',
+  SERVICE_CENTER: 'Service Center',
+  INVENTORY: 'Inventory',
+  TEAM: 'Team',
+  FINANCE: 'Finance',
+  REPORTS: 'Reports',
+  SYSTEM: 'System',
+}
+
 export interface NavItem {
   label: string
   href: string
@@ -52,16 +69,19 @@ export interface NavItem {
 
 export interface NavGroup {
   label: string
+  section: PermissionSection
   items: NavItem[]
 }
 
 export const navigation: NavGroup[] = [
   {
     label: 'Overview',
+    section: 'OVERVIEW',
     items: [{ label: 'Dashboard', href: '/', icon: LuLayoutDashboard }],
   },
   {
     label: 'Reception',
+    section: 'RECEPTION',
     items: [
       { label: 'Check In', href: '/reservations', icon: LuLogIn, moduleKey: 'RECEPTION' },
       { label: 'Room Management', href: '/rooms', icon: LuBedDouble, moduleKey: 'ROOMS' },
@@ -75,6 +95,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Housekeeping',
+    section: 'HOUSEKEEPING',
     items: [
       { label: 'Tasks', href: '/housekeeping', icon: LuListChecks, moduleKey: 'HOUSEKEEPING' },
       { label: 'Room Management', href: '/housekeeping/room-management', icon: LuBedDouble },
@@ -84,6 +105,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Sales',
+    section: 'SALES',
     items: [
       { label: 'Point of Sale', href: '/pos', icon: LuShoppingCart, moduleKey: 'POS' },
       { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
@@ -95,6 +117,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Kitchen',
+    section: 'KITCHEN',
     items: [
       { label: 'Active Orders', href: '/kitchen', icon: LuClipboardList, moduleKey: 'KITCHEN' },
       { label: 'Menu and Addons', href: '/kitchen/menu-addons', icon: LuUtensils },
@@ -104,6 +127,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Service Center',
+    section: 'SERVICE_CENTER',
     items: [
       { label: 'Point of Sale', href: '/service-center/pos', icon: LuShoppingCart, moduleKey: 'SERVICE_CENTER' },
       { label: 'Services', href: '/service-center/services', icon: LuConciergeBell },
@@ -120,6 +144,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Inventory',
+    section: 'INVENTORY',
     items: [
       { label: 'Categories', href: '/inventory/categories', icon: LuTags, moduleKey: 'INVENTORY' },
       { label: 'Store', href: '/store', icon: LuWarehouse, moduleKey: 'STORE' },
@@ -133,6 +158,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Team',
+    section: 'TEAM',
     items: [
       { label: 'Employees', href: '/team/employees', icon: LuUsers, moduleKey: 'HR' },
       { label: 'Roles and Permissions', href: '/team/roles-permissions', icon: LuShieldCheck },
@@ -140,6 +166,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Finance',
+    section: 'FINANCE',
     items: [
       { label: 'Expenses', href: '/finance/expenses', icon: LuWallet, moduleKey: 'ACCOUNTING' },
       { label: 'Salaries', href: '/finance/salaries', icon: LuBanknote },
@@ -149,6 +176,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'Reports',
+    section: 'REPORTS',
     items: [
       { label: 'Sales Report', href: '/reports', icon: LuChartColumn, moduleKey: 'REPORTS' },
       { label: 'Inventory', href: '/reports/inventory', icon: LuChartBar },
@@ -157,6 +185,7 @@ export const navigation: NavGroup[] = [
   },
   {
     label: 'System',
+    section: 'SYSTEM',
     items: [
       { label: 'Business Information', href: '/business-information', icon: LuBriefcaseBusiness },
       { label: 'Users', href: '/users', icon: LuUserCog },
@@ -164,3 +193,7 @@ export const navigation: NavGroup[] = [
     ],
   },
 ]
+
+export function sectionForPath(pathname: string): PermissionSection | undefined {
+  return navigation.find((group) => group.items.some((item) => item.href === pathname))?.section
+}
