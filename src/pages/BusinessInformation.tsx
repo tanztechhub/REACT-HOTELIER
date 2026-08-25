@@ -1,9 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { FormEvent } from 'react'
 import { LuCircleAlert, LuImagePlus, LuLoaderCircle, LuUpload } from 'react-icons/lu'
-import { api } from '@/lib/api'
+import { api, apiUpload, resolveLogoUrl } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { setTenantLogo } from '@/store/tenantSlice'
+import { writeCachedTheme } from '@/lib/themeCache'
+
+const MAX_LOGO_BYTES = 5 * 1024 * 1024
+const ACCEPTED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 
 const businessTypes = ['RESTAURANT', 'CAFE', 'HOTEL', 'MOTEL'] as const
 const currencies = ['KES', 'UGX', 'TZS', 'USD'] as const
@@ -27,6 +33,7 @@ const taxModeLabels: Record<TaxMode, string> = {
 
 type BusinessProfile = {
   logoUrl: string | null
+  shortName: string | null
   businessName: string
   businessType: BusinessType
   currency: Currency
@@ -48,6 +55,7 @@ type BusinessProfile = {
 }
 
 type ProfileForm = {
+  shortName: string
   businessName: string
   businessType: BusinessType | ''
   currency: Currency | ''
@@ -69,6 +77,7 @@ type ProfileForm = {
 }
 
 const emptyForm: ProfileForm = {
+  shortName: '',
   businessName: '', businessType: '', currency: '', registrationNumber: '', kraPin: '',
   taxRate: '16', taxMode: 'INCLUSIVE',
   primaryPhone: '', alternativePhone: '', email: '', website: '',
@@ -78,6 +87,7 @@ const emptyForm: ProfileForm = {
 
 function formFromProfile(profile: BusinessProfile): ProfileForm {
   return {
+    shortName: profile.shortName ?? '',
     businessName: profile.businessName,
     businessType: profile.businessType,
     currency: profile.currency,
@@ -101,9 +111,12 @@ function formFromProfile(profile: BusinessProfile): ProfileForm {
 
 export default function BusinessInformation() {
   const toast = useToast()
+  const dispatch = useAppDispatch()
+  const tenant = useAppSelector((s) => s.tenant)
   const [form, setForm] = useState<ProfileForm>(emptyForm)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -113,7 +126,11 @@ export default function BusinessInformation() {
     ;(async () => {
       try {
         const response = await api<{ profile: BusinessProfile | null }>('/business-profile')
-        if (!cancelled && response.profile) setForm(formFromProfile(response.profile))
+        if (cancelled) return
+        if (response.profile) {
+          setForm(formFromProfile(response.profile))
+          setLogoPreview(resolveLogoUrl(response.profile.logoUrl))
+        }
       } catch (cause) {
         const message = cause instanceof Error ? cause.message : 'Could not load business information'
         if (!cancelled) { setError(message); toast.error(message) }
@@ -126,10 +143,38 @@ export default function BusinessInformation() {
 
   const set = <K extends keyof ProfileForm>(key: K, value: ProfileForm[K]) => setForm((f) => ({ ...f, [key]: value }))
 
-  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
     if (!file) return
-    setLogoPreview(URL.createObjectURL(file))
+
+    if (file.size > MAX_LOGO_BYTES) { toast.error('Logo must be under 5MB'); return }
+    if (!ACCEPTED_LOGO_TYPES.includes(file.type)) { toast.error('Only PNG, JPG, WEBP, or GIF images are accepted'); return }
+
+    setUploadingLogo(true)
+    try {
+      const formData = new FormData()
+      formData.append('logo', file)
+      const response = await apiUpload<{ profile: { logoUrl: string } }>('/business-profile/logo', formData)
+      const absoluteUrl = resolveLogoUrl(response.profile.logoUrl)
+      setLogoPreview(absoluteUrl)
+      dispatch(setTenantLogo(response.profile.logoUrl))
+      if (tenant.tenantSlug) {
+        writeCachedTheme(tenant.tenantSlug, {
+          baseColor: tenant.themeBaseColor,
+          accentColor: tenant.themeAccentColor,
+          font: tenant.themeFont,
+          logoUrl: response.profile.logoUrl,
+          shortName: tenant.shortName,
+          businessType: tenant.businessType,
+        })
+      }
+      toast.success('Logo updated.')
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not upload logo')
+    } finally {
+      setUploadingLogo(false)
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -175,27 +220,36 @@ export default function BusinessInformation() {
       <div className="relative mt-6">
         <StampBadge />
         <form onSubmit={handleSubmit} className="overflow-hidden rounded-sm border bg-card shadow-sm">
-          <Section title="Logo" description="Shown across invoices, receipts, and the sidebar." first>
+          <Section title="Logo" description="Shown across the sidebar, login page, and browser tab favicon." first>
             <div className="flex items-center gap-5">
-              <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-dashed border-border bg-muted/40">
+              <div className="relative flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-dashed border-border bg-muted/40">
                 {logoPreview ? (
                   <img src={logoPreview} alt="Business logo preview" className="size-full object-cover" />
                 ) : (
                   <LuImagePlus className="size-7 text-muted-foreground" />
+                )}
+                {uploadingLogo && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-card/70">
+                    <LuLoaderCircle className="size-6 animate-spin text-secondary" />
+                  </div>
                 )}
               </div>
               <div>
                 <label className="inline-flex items-center gap-2 rounded-sm border border-border bg-background px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted">
                   <LuUpload className="size-4" />
                   Upload logo
-                  <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => void handleLogoChange(e)} disabled={uploadingLogo} />
                 </label>
-                <p className="mt-2 text-xs text-muted-foreground">PNG or JPG, square image recommended.</p>
+                <p className="mt-2 text-xs text-muted-foreground">PNG, JPG, WEBP, or GIF, up to 5MB. Square image recommended.</p>
               </div>
             </div>
           </Section>
 
           <Section title="General">
+            <Field label="Short Name" className="sm:col-span-2">
+              <input maxLength={24} className="input" placeholder="e.g. Grand Palace" value={form.shortName} onChange={(e) => set('shortName', e.target.value)} />
+              <span className="mt-1 block text-xs text-muted-foreground">Shown in place of the app name in the sidebar and login page — keep it short.</span>
+            </Field>
             <Field label="Business Name" required className="sm:col-span-2">
               <input required className="input" placeholder="e.g. Grand Palace Hotel" value={form.businessName} onChange={(e) => set('businessName', e.target.value)} />
             </Field>

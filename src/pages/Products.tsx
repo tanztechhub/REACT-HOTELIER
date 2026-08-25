@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
+  LuArrowLeftRight,
   LuBoxes,
   LuCircleAlert,
   LuCircleCheck,
@@ -21,12 +22,11 @@ const UNITS_OF_MEASURE = [
   'Pack', 'Dozen', 'Roll', 'Bottle', 'Can', 'Bag', 'Set', 'Pair', 'Meter',
 ] as const
 
-type Store = { id: string; name: string; code: string }
 type Category = { id: string; name: string; level: number; parentId: string | null }
+type Location = { id: string; name: string; type?: string }
+type StockByLocation = { locationId: string; locationName: string; quantity: string }
 type Product = {
   id: string
-  storeId: string
-  store: { id: string; name: string; code: string }
   categoryId: string | null
   category: { id: string; name: string; level: number } | null
   name: string
@@ -37,19 +37,20 @@ type Product = {
   unit: string
   isPerishable: boolean
   shelfLifeDays: number | null
-  quantity: string
+  stockByLocation: StockByLocation[]
+  totalQuantity: string
   reorderLevel: string
   maxStockLevel: string | null
   unitCost: string | null
+  sellingPrice: string | null
   preferredSupplier: string | null
   isActive: boolean
   createdAt: string
 }
 type Summary = { total: number; active: number; inactive: number; lowStock: number }
-type Movement = { id: string; type: 'RECEIPT' | 'DISPATCH' | 'ADJUSTMENT'; quantity: string; note: string | null; occurredAt: string }
+type Movement = { id: string; type: 'RECEIPT' | 'DISPATCH' | 'ADJUSTMENT' | 'TRANSFER'; location: { id: string; name: string }; quantity: string; note: string | null; occurredAt: string }
 
 type ProductForm = {
-  storeId: string
   categoryId: string
   name: string
   sku: string
@@ -59,19 +60,22 @@ type ProductForm = {
   unit: (typeof UNITS_OF_MEASURE)[number]
   isPerishable: boolean
   shelfLifeDays: string
-  quantity: string
+  openingStock: string
+  locationId: string
   reorderLevel: string
   maxStockLevel: string
   unitCost: string
+  sellingPrice: string
   preferredSupplier: string
   isActive: boolean
 }
 const emptyForm: ProductForm = {
-  storeId: '', categoryId: '', name: '', sku: '', barcode: '', brand: '', description: '',
+  categoryId: '', name: '', sku: '', barcode: '', brand: '', description: '',
   unit: 'Each', isPerishable: false, shelfLifeDays: '',
-  quantity: '0', reorderLevel: '0', maxStockLevel: '', unitCost: '', preferredSupplier: '',
+  openingStock: '0', locationId: '', reorderLevel: '0', maxStockLevel: '', unitCost: '', sellingPrice: '', preferredSupplier: '',
   isActive: true,
 }
+const emptyTransfer = { productId: '', productName: '', fromLocationId: '', toLocationId: '', quantity: '', stockByLocation: [] as StockByLocation[] }
 
 function SetupMessage() {
   return (
@@ -85,10 +89,9 @@ export default function Products() {
   const toast = useToast()
   const [products, setProducts] = useState<Product[]>([])
   const [summary, setSummary] = useState<Summary>({ total: 0, active: 0, inactive: 0, lowStock: 0 })
-  const [stores, setStores] = useState<Store[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [search, setSearch] = useState('')
-  const [storeFilter, setStoreFilter] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -98,6 +101,10 @@ export default function Products() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [movements, setMovements] = useState<Movement[] | null>(null)
+  const [transfer, setTransfer] = useState(emptyTransfer)
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferring, setTransferring] = useState(false)
+  const [transferError, setTransferError] = useState('')
 
   const loadProducts = useCallback(async () => {
     setLoading(true)
@@ -105,7 +112,6 @@ export default function Products() {
     try {
       const query = new URLSearchParams()
       if (search.trim()) query.set('search', search.trim())
-      if (storeFilter) query.set('storeId', storeFilter)
       if (lowStockOnly) query.set('lowStock', 'true')
       const response = await api<{ products: Product[]; summary: Summary }>(`/products${query.size ? `?${query}` : ''}`)
       setProducts(response.products)
@@ -117,25 +123,24 @@ export default function Products() {
     } finally {
       setLoading(false)
     }
-  }, [search, storeFilter, lowStockOnly, toast])
+  }, [search, lowStockOnly, toast])
 
   useEffect(() => { const timer = window.setTimeout(() => void loadProducts(), 250); return () => window.clearTimeout(timer) }, [loadProducts])
 
   useEffect(() => {
-    Promise.all([
-      api<{ stores: Store[] }>('/stores'),
-      api<{ categories: Category[] }>('/categories'),
-    ]).then(([storeRes, categoryRes]) => {
-      setStores(storeRes.stores)
-      setCategories(categoryRes.categories)
-    }).catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load stores/categories'))
+    api<{ categories: Category[] }>('/categories?scope=STORE')
+      .then((r) => setCategories(r.categories))
+      .catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load categories'))
+    api<{ locations: Location[] }>('/locations')
+      .then((r) => setLocations(r.locations))
+      .catch(() => {})
   }, [toast])
 
   const categoryLabel = useMemo(() => (c: Category) => '— '.repeat(c.level - 1) + c.name, [])
 
   function openCreate() {
     setEditing(null)
-    setForm({ ...emptyForm, storeId: stores[0]?.id ?? '' })
+    setForm(emptyForm)
     setMovements(null)
     setError('')
     setShowForm(true)
@@ -144,7 +149,6 @@ export default function Products() {
   function openEdit(product: Product) {
     setEditing(product)
     setForm({
-      storeId: product.storeId,
       categoryId: product.categoryId ?? '',
       name: product.name,
       sku: product.sku ?? '',
@@ -154,10 +158,12 @@ export default function Products() {
       unit: product.unit as (typeof UNITS_OF_MEASURE)[number],
       isPerishable: product.isPerishable,
       shelfLifeDays: product.shelfLifeDays?.toString() ?? '',
-      quantity: product.quantity,
+      openingStock: '0',
+      locationId: '',
       reorderLevel: product.reorderLevel,
       maxStockLevel: product.maxStockLevel ?? '',
       unitCost: product.unitCost ?? '',
+      sellingPrice: product.sellingPrice ?? '',
       preferredSupplier: product.preferredSupplier ?? '',
       isActive: product.isActive,
     })
@@ -173,7 +179,7 @@ export default function Products() {
     setError('')
     setNotice('')
     try {
-      const payload = { ...form, ...(editing ? { quantity: undefined } : {}) }
+      const payload = { ...form, ...(editing ? { openingStock: undefined, locationId: undefined } : {}) }
       await api(editing ? `/products/${editing.id}` : '/products', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
       setNotice(editing ? 'Product updated.' : 'Product added.')
       toast.success(editing ? 'Product updated.' : 'Product added.')
@@ -204,23 +210,51 @@ export default function Products() {
     }
   }
 
+  function openTransfer(product: Product) {
+    setTransfer({
+      productId: product.id,
+      productName: product.name,
+      fromLocationId: product.stockByLocation[0]?.locationId ?? '',
+      toLocationId: '',
+      quantity: '',
+      stockByLocation: product.stockByLocation,
+    })
+    setTransferError('')
+    setShowTransfer(true)
+  }
+
+  async function saveTransfer(event: FormEvent) {
+    event.preventDefault()
+    setTransferring(true)
+    setTransferError('')
+    try {
+      await api(`/products/${transfer.productId}/transfer`, { method: 'POST', body: JSON.stringify({ fromLocationId: transfer.fromLocationId, toLocationId: transfer.toLocationId, quantity: transfer.quantity }) })
+      toast.success('Stock transferred.')
+      setShowTransfer(false)
+      await loadProducts()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not transfer stock'
+      setTransferError(message)
+      toast.error(message)
+    } finally {
+      setTransferring(false)
+    }
+  }
+
   if (!hasApiTenant()) return <SetupMessage />
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-secondary">Inventory</p>
+          <p className="text-sm font-semibold text-secondary">Products</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Products</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Record everything received into your stores and track stock on hand.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Record everything received into the store and track stock on hand.</p>
         </div>
-        <button onClick={openCreate} disabled={stores.length === 0} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 disabled:opacity-50">
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
           <LuPlus /> Add product
         </button>
       </header>
-      {stores.length === 0 && !loading && (
-        <p className="mt-3 text-sm text-warning">Create a store first (Inventory &rarr; Store) before adding products.</p>
-      )}
 
       <section className="mt-7 grid gap-3 sm:grid-cols-4">
         {([
@@ -258,10 +292,6 @@ export default function Products() {
             <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, SKU, barcode, brand…" className="w-full rounded-sm border bg-background py-2.5 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
           </label>
-          <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none">
-            <option value="">All stores</option>
-            {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
           <label className="flex items-center gap-2 rounded-sm border bg-background px-3 py-2.5 text-sm font-medium">
             <input type="checkbox" checked={lowStockOnly} onChange={(e) => setLowStockOnly(e.target.checked)} className="size-4 accent-secondary" />
             Low stock only
@@ -279,15 +309,15 @@ export default function Products() {
                 <tr>
                   <th className="px-5 py-3">Product</th>
                   <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Store</th>
-                  <th className="px-5 py-3">Stock</th>
+                  <th className="px-5 py-3">Stock by location</th>
+                  <th className="px-5 py-3">Total</th>
                   <th className="px-5 py-3">Unit Cost</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {products.map((product) => {
-                  const low = Number(product.quantity) <= Number(product.reorderLevel)
+                  const low = Number(product.totalQuantity) <= Number(product.reorderLevel)
                   return (
                     <tr key={product.id} className="border-t transition hover:bg-muted/30">
                       <td className="px-5 py-4">
@@ -295,15 +325,24 @@ export default function Products() {
                         <p className="text-xs text-muted-foreground">{[product.sku, product.brand].filter(Boolean).join(' · ') || '—'}</p>
                       </td>
                       <td className="px-5 py-4 text-muted-foreground">{product.category?.name ?? '—'}</td>
-                      <td className="px-5 py-4 text-muted-foreground">{product.store.name}</td>
+                      <td className="px-5 py-4 text-muted-foreground">
+                        {product.stockByLocation.length === 0 ? '—' : (
+                          <div className="flex flex-wrap gap-1">
+                            {product.stockByLocation.map((s) => (
+                              <span key={s.locationId} className="rounded-full bg-muted px-2 py-0.5 text-xs">{s.locationName}: {Number(s.quantity).toLocaleString()}</span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-5 py-4">
-                        <span className={cn('font-semibold', low ? 'text-warning' : 'text-foreground')}>{Number(product.quantity).toLocaleString()} {product.unit}</span>
+                        <span className={cn('font-semibold', low ? 'text-warning' : 'text-foreground')}>{Number(product.totalQuantity).toLocaleString()} {product.unit}</span>
                         {low && <span className="ml-2 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning">Low</span>}
                         {!product.isActive && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Inactive</span>}
                       </td>
                       <td className="px-5 py-4 text-muted-foreground">{product.unitCost ? `KES ${Number(product.unitCost).toLocaleString()}` : '—'}</td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1">
+                          <button onClick={() => openTransfer(product)} title="Transfer stock" className="rounded-sm p-2 text-muted-foreground hover:bg-accent/10 hover:text-accent"><LuArrowLeftRight /></button>
                           <button onClick={() => openEdit(product)} title="Edit product" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil /></button>
                           <button onClick={() => void deleteProduct(product)} title="Delete product" className="rounded-sm p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 /></button>
                         </div>
@@ -353,18 +392,29 @@ export default function Products() {
             </FieldGroup>
 
             <FieldGroup title="Stock">
-              <Field label="Store" required>
-                <select required className="input" value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })}>
-                  <option value="" disabled>Select store</option>
-                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </Field>
               {editing ? (
-                <Field label="Current Stock">
-                  <input disabled className="input opacity-70" value={`${Number(editing.quantity).toLocaleString()} ${editing.unit}`} />
-                </Field>
+                <>
+                  {editing.stockByLocation.map((s) => (
+                    <Field key={s.locationId} label={s.locationName}>
+                      <input disabled className="input opacity-70" value={`${Number(s.quantity).toLocaleString()} ${editing.unit}`} />
+                    </Field>
+                  ))}
+                  <Field label="Total Stock" className="sm:col-span-2">
+                    <input disabled className="input opacity-70 font-semibold" value={`${Number(editing.totalQuantity).toLocaleString()} ${editing.unit}`} />
+                  </Field>
+                </>
               ) : (
-                <Field label="Opening Stock" required><input required type="number" min="0" step="0.001" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} className="input" /></Field>
+                <>
+                  <Field label="Opening Stock" required><input required type="number" min="0" step="0.001" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} className="input" /></Field>
+                  {Number(form.openingStock) > 0 && (
+                    <Field label="Received At" required={locations.length !== 1}>
+                      <select required={locations.length !== 1} className="input" value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
+                        <option value="">{locations.length === 1 ? `${locations[0].name} (only location)` : 'Select a location'}</option>
+                        {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      </select>
+                    </Field>
+                  )}
+                </>
               )}
               <Field label="Reorder Level"><input type="number" min="0" step="0.001" placeholder="e.g. 12" value={form.reorderLevel} onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })} className="input" /></Field>
               <Field label="Max Stock Level"><input type="number" min="0" step="0.001" placeholder="e.g. 200" value={form.maxStockLevel} onChange={(e) => setForm({ ...form, maxStockLevel: e.target.value })} className="input" /></Field>
@@ -372,7 +422,11 @@ export default function Products() {
 
             <FieldGroup title="Costing">
               <Field label="Unit Cost (KES)"><input type="number" min="0" step="0.01" placeholder="e.g. 45.50" value={form.unitCost} onChange={(e) => setForm({ ...form, unitCost: e.target.value })} className="input" /></Field>
-              <Field label="Preferred Supplier"><input placeholder="e.g. Nairobi Bottlers Ltd" value={form.preferredSupplier} onChange={(e) => setForm({ ...form, preferredSupplier: e.target.value })} className="input" /></Field>
+              <Field label="Selling Price (KES)">
+                <input type="number" min="0" step="0.01" placeholder="e.g. 65.00" value={form.sellingPrice} onChange={(e) => setForm({ ...form, sellingPrice: e.target.value })} className="input" />
+                <span className="mt-1 block text-xs text-muted-foreground">Leave blank if this is never sold directly (e.g. a recipe ingredient only) — the Products POS only lists items with a price set.</span>
+              </Field>
+              <Field label="Preferred Supplier" className="sm:col-span-2"><input placeholder="e.g. Nairobi Bottlers Ltd" value={form.preferredSupplier} onChange={(e) => setForm({ ...form, preferredSupplier: e.target.value })} className="input" /></Field>
             </FieldGroup>
 
             <label className="mt-6 flex items-center justify-between rounded-sm border bg-background px-3 py-2.5 text-sm font-medium">
@@ -386,7 +440,7 @@ export default function Products() {
                 <div className="space-y-1.5">
                   {movements.slice(0, 5).map((m) => (
                     <div key={m.id} className="flex items-center justify-between rounded-sm bg-muted/50 px-3 py-2 text-xs">
-                      <span className="font-medium">{m.type === 'DISPATCH' ? 'Dispatch' : m.type === 'RECEIPT' ? 'Receipt' : 'Adjustment'}{m.note ? ` — ${m.note}` : ''}</span>
+                      <span className="font-medium">{m.type === 'DISPATCH' ? 'Dispatch' : m.type === 'RECEIPT' ? 'Receipt' : m.type === 'TRANSFER' ? 'Transfer' : 'Adjustment'} · {m.location.name}{m.note ? ` — ${m.note}` : ''}</span>
                       <span className={cn('font-semibold', Number(m.quantity) < 0 ? 'text-destructive' : 'text-success')}>{Number(m.quantity) > 0 ? '+' : ''}{Number(m.quantity).toLocaleString()}</span>
                     </div>
                   ))}
@@ -399,6 +453,55 @@ export default function Products() {
               <button disabled={saving} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
                 {saving && <LuLoaderCircle className="animate-spin" />}
                 {editing ? 'Save changes' : 'Create product'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showTransfer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowTransfer(false) }}>
+          <form onSubmit={saveTransfer} className="w-full max-w-md rounded-sm border bg-card p-6 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-secondary">Transfer stock</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold">{transfer.productName}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {transfer.stockByLocation.length === 0 ? 'No stock recorded yet' : transfer.stockByLocation.map((s) => `${s.locationName}: ${Number(s.quantity).toLocaleString()}`).join(' · ')}
+              </p>
+            </div>
+
+            {transferError && (
+              <div className="mt-4 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
+                <LuCircleAlert />
+                {transferError}
+              </div>
+            )}
+
+            <div className="mt-5 space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="From" required>
+                  <select required className="input" value={transfer.fromLocationId} onChange={(e) => setTransfer({ ...transfer, fromLocationId: e.target.value })}>
+                    <option value="" disabled>Select location</option>
+                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="To" required>
+                  <select required className="input" value={transfer.toLocationId} onChange={(e) => setTransfer({ ...transfer, toLocationId: e.target.value })}>
+                    <option value="" disabled>Select location</option>
+                    {locations.filter((l) => l.id !== transfer.fromLocationId).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <Field label="Quantity" required>
+                <input required autoFocus type="number" min="0" step="0.001" value={transfer.quantity} onChange={(e) => setTransfer({ ...transfer, quantity: e.target.value })} className="input" />
+              </Field>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+              <button type="button" onClick={() => setShowTransfer(false)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+              <button disabled={transferring} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+                {transferring && <LuLoaderCircle className="animate-spin" />}
+                Transfer
               </button>
             </div>
           </form>

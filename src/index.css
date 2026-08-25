@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Jost:ital,wght@0,100..900;1,100..900&display=swap');
-
 @import "tailwindcss";
 
 /*
@@ -51,6 +49,15 @@
   --sidebar-muted: #a6b8e0;
   --sidebar-border: #22386e;
   --sidebar-accent: #1c3f82;
+
+  /* Indirection, not a literal, on purpose: Tailwind's `@theme inline`
+     constant-folds any THEME token declared as a literal directly into
+     every consuming utility class at build time (e.g. .font-display would
+     become a hardcoded "font-family: \"Jost\", sans-serif"), which makes it
+     immune to a later runtime override via applyTheme(). Routing --font-sans
+     /--font-display through this plain var (same trick already used for
+     every color token above) keeps them genuinely runtime-overridable. */
+  --brand-font: "Jost", sans-serif;
 
   --radius: 0.65rem;
   --shadow-color: 220 40% 10%;
@@ -144,8 +151,8 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --font-display: "Jost", sans-serif;
-  --font-sans: "Jost", sans-serif;
+  --font-display: var(--brand-font);
+  --font-sans: var(--brand-font);
 }
 
 @layer base {
@@ -216,7 +223,12 @@
   }
 }
 
-@layer utilities {
+/* .input is a base component style, not a single-purpose utility — it must
+   live in @layer components (resolved before @layer utilities) so that real
+   utility classes like w-20/w-28/flex-1, applied alongside "input" on the
+   same element, reliably win the cascade instead of losing to this width:
+   100%. Layer position decides ties here, not source order. */
+@layer components {
   .input {
     width: 100%;
     border-radius: var(--radius-sm);
@@ -232,7 +244,9 @@
   .input:focus {
     box-shadow: 0 0 0 2px var(--color-ring);
   }
+}
 
+@layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--color-border) transparent;
@@ -255,5 +269,25 @@
 
   .scrollbar-none::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Isolates a single element for printing (receipts) — everything else on
+   the page is hidden, the target is pulled out to fill the printed page. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .receipt-print-area,
+  .receipt-print-area * {
+    visibility: visible;
+  }
+
+  .receipt-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
   }
 }

@@ -1,12 +1,19 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api } from '@/lib/api'
 import { resolveTenant as resolveTenantRequest } from '@/lib/tenant'
+import { applyTheme } from '@/lib/theme'
+import { applyBranding } from '@/lib/branding'
+import { writeCachedTheme } from '@/lib/themeCache'
 
 export type BusinessProfile = {
   businessName: string
   businessType: string
   currency: string
   logoUrl: string | null
+  shortName: string | null
+  themeBaseColor: string
+  themeAccentColor: string
+  themeFont: string
 } | null
 
 export type License = {
@@ -29,6 +36,12 @@ export type TenantState = {
   businessProfile: BusinessProfile
   license: License
   loaded: boolean
+  themeBaseColor: string
+  themeAccentColor: string
+  themeFont: string
+  logoUrl: string | null
+  shortName: string | null
+  businessType: string
 }
 
 const initialState: TenantState = {
@@ -40,9 +53,23 @@ const initialState: TenantState = {
   businessProfile: null,
   license: null,
   loaded: false,
+  themeBaseColor: '#1c74d1',
+  themeAccentColor: '#43a047',
+  themeFont: 'jost',
+  logoUrl: null,
+  shortName: null,
+  businessType: 'HOTEL',
 }
 
-export const resolveTenant = createAsyncThunk('tenant/resolve', async () => resolveTenantRequest())
+export const resolveTenant = createAsyncThunk('tenant/resolve', async () => {
+  const resolved = await resolveTenantRequest()
+  const theme = { baseColor: resolved.themeBaseColor, accentColor: resolved.themeAccentColor, font: resolved.themeFont }
+  const branding = { logoUrl: resolved.logoUrl, shortName: resolved.shortName, businessType: resolved.businessType }
+  applyTheme(theme)
+  applyBranding(branding)
+  writeCachedTheme(resolved.slug, { ...theme, ...branding })
+  return resolved
+})
 
 export const fetchTenantContext = createAsyncThunk('tenant/fetchContext', async () => {
   const [profileRes, licenseRes] = await Promise.all([
@@ -61,6 +88,14 @@ const tenantSlice = createSlice({
       state.license = null
       state.loaded = false
     },
+    setTenantTheme: (state, action: { payload: { baseColor: string; accentColor: string; font: string } }) => {
+      state.themeBaseColor = action.payload.baseColor
+      state.themeAccentColor = action.payload.accentColor
+      state.themeFont = action.payload.font
+    },
+    setTenantLogo: (state, action: { payload: string }) => {
+      state.logoUrl = action.payload
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -68,6 +103,12 @@ const tenantSlice = createSlice({
         state.tenantId = action.payload.tenantId
         state.tenantName = action.payload.name
         state.tenantSlug = action.payload.slug
+        state.themeBaseColor = action.payload.themeBaseColor
+        state.themeAccentColor = action.payload.themeAccentColor
+        state.themeFont = action.payload.themeFont
+        state.logoUrl = action.payload.logoUrl
+        state.shortName = action.payload.shortName
+        state.businessType = action.payload.businessType
         state.resolved = true
         state.resolveError = null
       })
@@ -83,5 +124,5 @@ const tenantSlice = createSlice({
   },
 })
 
-export const { clearTenantContext } = tenantSlice.actions
+export const { clearTenantContext, setTenantTheme, setTenantLogo } = tenantSlice.actions
 export default tenantSlice.reducer

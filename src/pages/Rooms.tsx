@@ -20,33 +20,43 @@ import { api } from "@/lib/api";
 
 type RoomStatus = "VACANT" | "OCCUPIED" | "OUT_OF_SERVICE";
 type Cleanliness = "CLEAN" | "DIRTY" | "INSPECTING";
-type PosOrder = {
-  id: string;
-  status: string;
-  items: {
-    quantity: number;
-    unitPrice: string | number;
-    addons: { quantity: number; unitPrice: string | number }[];
-  }[];
-};
+type FolioLineItem = { id: string; amount: string | number; quantity: number };
+type FolioPayment = { id: string; amount: string | number };
+type Folio = { lineItems: FolioLineItem[]; payments: FolioPayment[] };
 type Stay = {
   id: string;
   checkIn: string;
   checkOut: string;
-  customer: { firstName: string; lastName: string };
-  posOrders: PosOrder[];
+  customer: { firstName: string; lastName: string | null };
+  folio: Folio | null;
 };
+const MEAL_PLANS = ["ROOM_ONLY", "BED_AND_BREAKFAST", "HALF_BOARD", "FULL_BOARD"] as const;
+type MealPlan = (typeof MEAL_PLANS)[number];
+const mealPlanLabels: Record<MealPlan, string> = {
+  ROOM_ONLY: "Room Only",
+  BED_AND_BREAKFAST: "Bed & Breakfast",
+  HALF_BOARD: "Half Board",
+  FULL_BOARD: "Full Board",
+};
+type AuditEmployee = { id: string; firstName: string; lastName: string } | null;
 type Room = {
   id: string;
   number: string;
   name: string | null;
-  type: string;
+  roomType: { id: string; name: string; baseRate: string | number };
+  floor: string | null;
+  wing: string | null;
+  notes: string | null;
   capacity: number;
   nightlyRate: string | number;
   status: RoomStatus;
   cleanliness: Cleanliness;
   reservations: Stay[];
   _count: { reservations: number };
+  createdAt: string;
+  updatedAt: string;
+  createdByEmployee: AuditEmployee;
+  updatedByEmployee: AuditEmployee;
 };
 type Summary = {
   total: number;
@@ -63,6 +73,11 @@ type RoomType = {
   baseRate: string | number;
   amenities: string[];
   isActive: boolean;
+  rates: { mealPlan: MealPlan; price: string | number }[];
+  createdAt: string;
+  updatedAt: string;
+  createdByEmployee: AuditEmployee;
+  updatedByEmployee: AuditEmployee;
 };
 type TypeForm = {
   name: string;
@@ -71,11 +86,37 @@ type TypeForm = {
   baseRate: string;
   amenities: string;
   isActive: boolean;
+  rateRoomOnly: string;
+  rateBedAndBreakfast: string;
+  rateHalfBoard: string;
+  rateFullBoard: string;
+};
+const emptyTypeForm: TypeForm = {
+  name: "",
+  description: "",
+  capacity: "2",
+  baseRate: "8500",
+  amenities: "",
+  isActive: true,
+  rateRoomOnly: "",
+  rateBedAndBreakfast: "",
+  rateHalfBoard: "",
+  rateFullBoard: "",
+};
+type RateFormKey = "rateRoomOnly" | "rateBedAndBreakfast" | "rateHalfBoard" | "rateFullBoard";
+const mealPlanFormKey: Record<MealPlan, RateFormKey> = {
+  ROOM_ONLY: "rateRoomOnly",
+  BED_AND_BREAKFAST: "rateBedAndBreakfast",
+  HALF_BOARD: "rateHalfBoard",
+  FULL_BOARD: "rateFullBoard",
 };
 type RoomForm = {
   number: string;
   name: string;
-  type: string;
+  roomTypeId: string;
+  floor: string;
+  wing: string;
+  notes: string;
   capacity: string;
   nightlyRate: string;
   status: RoomStatus;
@@ -84,7 +125,10 @@ type RoomForm = {
 const emptyForm: RoomForm = {
   number: "",
   name: "",
-  type: "Deluxe King",
+  roomTypeId: "",
+  floor: "",
+  wing: "",
+  notes: "",
   capacity: "2",
   nightlyRate: "8500",
   status: "VACANT",
@@ -92,24 +136,17 @@ const emptyForm: RoomForm = {
 };
 const formatKes = (value: number) =>
   `KSh ${value.toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;
-const folioTotal = (stay?: Stay) =>
-  stay?.posOrders.reduce(
-    (orderSum, order) =>
-      orderSum +
-      order.items.reduce(
-        (itemSum, item) =>
-          itemSum +
-          Number(item.unitPrice) * item.quantity +
-          item.addons.reduce(
-            (addonSum, addon) =>
-              addonSum +
-              Number(addon.unitPrice) * addon.quantity * item.quantity,
-            0,
-          ),
-        0,
-      ),
-    0,
-  ) ?? 0;
+// The real folio (room charges + services + ad-hoc + any POS orders billed
+// to this stay), not a hand-rolled approximation — replaces the old
+// POS-orders-only sum, which never included room charges and ignored
+// discount/tax entirely.
+const folioTotal = (stay?: Stay) => {
+  const folio = stay?.folio;
+  if (!folio) return 0;
+  const charges = folio.lineItems.reduce((sum, item) => sum + Number(item.amount) * item.quantity, 0);
+  const paid = folio.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
+  return charges - paid;
+};
 
 export default function Rooms() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -128,14 +165,7 @@ export default function Rooms() {
   const [showForm, setShowForm] = useState(false);
   const [showTypes, setShowTypes] = useState(false);
   const [editingType, setEditingType] = useState<RoomType | null>(null);
-  const [typeForm, setTypeForm] = useState<TypeForm>({
-    name: "",
-    description: "",
-    capacity: "2",
-    baseRate: "8500",
-    amenities: "",
-    isActive: true,
-  });
+  const [typeForm, setTypeForm] = useState<TypeForm>(emptyTypeForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -168,20 +198,23 @@ export default function Rooms() {
         (room) =>
           (filter === "ALL" || room.status === filter) &&
           (!search.trim() ||
-            `${room.number} ${room.name ?? ""} ${room.type}`
+            `${room.number} ${room.name ?? ""} ${room.roomType.name}`
               .toLowerCase()
               .includes(search.toLowerCase().trim())),
       ),
     [filter, rooms, search],
   );
+  function rateFor(type: RoomType, mealPlan: MealPlan) {
+    return type.rates.find((r) => r.mealPlan === mealPlan)?.price;
+  }
   function openCreate() {
     const selected = roomTypes.find((type) => type.isActive);
     setEditing(null);
     setForm({
       ...emptyForm,
-      type: selected?.name ?? "",
+      roomTypeId: selected?.id ?? "",
       capacity: String(selected?.capacity ?? 2),
-      nightlyRate: String(selected?.baseRate ?? 0),
+      nightlyRate: String(selected ? (rateFor(selected, "ROOM_ONLY") ?? selected.baseRate) : 0),
     });
     setShowForm(true);
     setError("");
@@ -191,7 +224,10 @@ export default function Rooms() {
     setForm({
       number: room.number,
       name: room.name ?? "",
-      type: room.type,
+      roomTypeId: room.roomType.id,
+      floor: room.floor ?? "",
+      wing: room.wing ?? "",
+      notes: room.notes ?? "",
       capacity: String(room.capacity),
       nightlyRate: String(room.nightlyRate),
       status: room.status,
@@ -263,13 +299,13 @@ export default function Rooms() {
     }
   }
 
-  function selectRoomType(name: string) {
-    const selected = roomTypes.find((type) => type.name === name);
+  function selectRoomType(id: string) {
+    const selected = roomTypes.find((type) => type.id === id);
     setForm({
       ...form,
-      type: name,
+      roomTypeId: id,
       capacity: String(selected?.capacity ?? form.capacity),
-      nightlyRate: String(selected?.baseRate ?? form.nightlyRate),
+      nightlyRate: String(selected ? (rateFor(selected, "ROOM_ONLY") ?? selected.baseRate) : form.nightlyRate),
     });
   }
   function editRoomType(type: RoomType) {
@@ -281,36 +317,40 @@ export default function Rooms() {
       baseRate: String(type.baseRate),
       amenities: type.amenities.join(", "),
       isActive: type.isActive,
+      rateRoomOnly: String(rateFor(type, "ROOM_ONLY") ?? ""),
+      rateBedAndBreakfast: String(rateFor(type, "BED_AND_BREAKFAST") ?? ""),
+      rateHalfBoard: String(rateFor(type, "HALF_BOARD") ?? ""),
+      rateFullBoard: String(rateFor(type, "FULL_BOARD") ?? ""),
     });
   }
   function resetTypeForm() {
     setEditingType(null);
-    setTypeForm({
-      name: "",
-      description: "",
-      capacity: "2",
-      baseRate: "8500",
-      amenities: "",
-      isActive: true,
-    });
+    setTypeForm(emptyTypeForm);
   }
   async function saveRoomType(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError("");
     try {
+      const rates = MEAL_PLANS.filter((plan) => typeForm[mealPlanFormKey[plan]].trim() !== "").map((plan) => ({
+        mealPlan: plan,
+        price: Number(typeForm[mealPlanFormKey[plan]]),
+      }));
       await api(
         editingType ? `/rooms/types/${editingType.id}` : "/rooms/types",
         {
           method: editingType ? "PATCH" : "POST",
           body: JSON.stringify({
-            ...typeForm,
+            name: typeForm.name,
+            description: typeForm.description,
             capacity: Number(typeForm.capacity),
             baseRate: Number(typeForm.baseRate),
+            isActive: typeForm.isActive,
             amenities: typeForm.amenities
               .split(",")
               .map((item) => item.trim())
               .filter(Boolean),
+            rates,
           }),
         },
       );
@@ -469,7 +509,7 @@ export default function Rooms() {
         >
           <form
             onSubmit={saveRoom}
-            className="w-full max-w-xl rounded-sm border bg-card p-6 shadow-2xl"
+            className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl"
           >
             <p className="text-sm font-semibold text-secondary">
               {editing ? "Edit room" : "New room"}
@@ -498,37 +538,53 @@ export default function Rooms() {
                 <Field label="Room type">
                   <select
                     required
-                    value={form.type}
+                    value={form.roomTypeId}
                     onChange={(event) => selectRoomType(event.target.value)}
                     className="input"
                   >
                     <option value="">Select a room type</option>
                     {roomTypes
                       .filter(
-                        (type) => type.isActive || type.name === form.type,
+                        (type) => type.isActive || type.id === form.roomTypeId,
                       )
                       .map((type) => (
-                        <option key={type.id} value={type.name}>
+                        <option key={type.id} value={type.id}>
                           {type.name} · {type.capacity} guests ·{" "}
                           {formatKes(Number(type.baseRate))}
                         </option>
                       ))}
                   </select>
                 </Field>
-                {roomTypes.find((type) => type.name === form.type) && (
+                {roomTypes.find((type) => type.id === form.roomTypeId) && (
                   <div className="mt-2 rounded-sm bg-secondary/5 p-3 text-xs text-muted-foreground">
                     <p>
-                      {roomTypes.find((type) => type.name === form.type)
+                      {roomTypes.find((type) => type.id === form.roomTypeId)
                         ?.description || "No description"}
                     </p>
                     <p className="mt-1 font-medium text-secondary">
                       {roomTypes
-                        .find((type) => type.name === form.type)
+                        .find((type) => type.id === form.roomTypeId)
                         ?.amenities.join(" · ") || "No amenities configured"}
                     </p>
                   </div>
                 )}
               </div>
+              <Field label="Floor">
+                <input
+                  value={form.floor}
+                  onChange={(e) => setForm({ ...form, floor: e.target.value })}
+                  placeholder="e.g. 2"
+                  className="input"
+                />
+              </Field>
+              <Field label="Wing">
+                <input
+                  value={form.wing}
+                  onChange={(e) => setForm({ ...form, wing: e.target.value })}
+                  placeholder="e.g. East Wing"
+                  className="input"
+                />
+              </Field>
               <Field label="Guest capacity">
                 <input
                   required
@@ -583,7 +639,25 @@ export default function Rooms() {
                   <option value="INSPECTING">Inspecting</option>
                 </select>
               </Field>
+              <div className="sm:col-span-2">
+                <Field label="Notes">
+                  <textarea
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Anything worth remembering about this room"
+                    className="input"
+                    rows={2}
+                  />
+                </Field>
+              </div>
             </div>
+            {editing && (editing.createdByEmployee || editing.updatedByEmployee) && (
+              <p className="mt-5 border-t pt-3 text-xs text-muted-foreground">
+                {editing.createdByEmployee && <>Created by {editing.createdByEmployee.firstName} {editing.createdByEmployee.lastName} on {new Date(editing.createdAt).toLocaleDateString()}</>}
+                {editing.createdByEmployee && editing.updatedByEmployee && " · "}
+                {editing.updatedByEmployee && <>Last updated by {editing.updatedByEmployee.firstName} {editing.updatedByEmployee.lastName} on {new Date(editing.updatedAt).toLocaleDateString()}</>}
+              </p>
+            )}
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
@@ -675,6 +749,26 @@ export default function Rooms() {
                   placeholder="Amenities, comma separated"
                   className="input"
                 />
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Rate tiers (leave blank to skip)
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {MEAL_PLANS.map((plan) => (
+                      <input
+                        key={plan}
+                        type="number"
+                        min="0"
+                        value={typeForm[mealPlanFormKey[plan]]}
+                        onChange={(e) =>
+                          setTypeForm({ ...typeForm, [mealPlanFormKey[plan]]: e.target.value })
+                        }
+                        placeholder={mealPlanLabels[plan]}
+                        className="input"
+                      />
+                    ))}
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -686,6 +780,13 @@ export default function Rooms() {
                   Active for new rooms
                 </label>
               </div>
+              {editingType && (editingType.createdByEmployee || editingType.updatedByEmployee) && (
+                <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+                  {editingType.createdByEmployee && <>Created by {editingType.createdByEmployee.firstName} {editingType.createdByEmployee.lastName} on {new Date(editingType.createdAt).toLocaleDateString()}</>}
+                  {editingType.createdByEmployee && editingType.updatedByEmployee && " · "}
+                  {editingType.updatedByEmployee && <>Last updated by {editingType.updatedByEmployee.firstName} {editingType.updatedByEmployee.lastName} on {new Date(editingType.updatedAt).toLocaleDateString()}</>}
+                </p>
+              )}
               <div className="mt-5 flex gap-2">
                 <button
                   disabled={saving}
@@ -742,6 +843,18 @@ export default function Rooms() {
                             </span>
                           ))}
                         </div>
+                        {type.rates.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {type.rates.map((rate) => (
+                              <span
+                                key={rate.mealPlan}
+                                className="rounded bg-secondary/10 px-2 py-0.5 text-[10px] font-semibold text-secondary"
+                              >
+                                {mealPlanLabels[rate.mealPlan]}: {formatKes(Number(rate.price))}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-1">
                         <button
@@ -784,12 +897,15 @@ function RoomCard({
 }) {
   const stay = room.reservations[0];
   const charge = folioTotal(stay);
+  // Occupied or dirty means the room can't be sold right now — make that
+  // conspicuous instead of blending in with the other status colors.
+  const unavailable = room.status === "OCCUPIED" || room.cleanliness === "DIRTY";
   const statusTone =
-    room.status === "VACANT"
-      ? "bg-success"
-      : room.status === "OCCUPIED"
-        ? "bg-secondary"
-        : "bg-warning";
+    room.status === "OUT_OF_SERVICE"
+      ? "bg-warning"
+      : unavailable
+        ? "bg-destructive"
+        : "bg-success";
   return (
     <article className="group overflow-hidden rounded-sm border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-xl">
       <div className={`h-1.5 ${statusTone}`} />
@@ -797,13 +913,18 @@ function RoomCard({
         <div className="flex items-start justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-              {room.type}
+              {room.roomType.name}
             </p>
             <h2 className="mt-1 font-display text-3xl font-bold">
               {room.number}
             </h2>
             {room.name && (
               <p className="text-sm text-muted-foreground">{room.name}</p>
+            )}
+            {(room.floor || room.wing) && (
+              <p className="text-xs text-muted-foreground">
+                {[room.floor && `Floor ${room.floor}`, room.wing].filter(Boolean).join(" · ")}
+              </p>
             )}
           </div>
           <div className="flex gap-1">
@@ -845,14 +966,14 @@ function RoomCard({
                   Checked-in guest
                 </p>
                 <p className="text-sm font-semibold">
-                  {stay.customer.firstName} {stay.customer.lastName}
+                  {stay.customer.firstName} {stay.customer.lastName ?? ''}
                 </p>
               </div>
               <LuUsers className="text-secondary" />
             </div>
             <div className="mt-3 flex items-center justify-between border-t pt-3">
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <LuReceiptText /> POS room charges
+                <LuReceiptText /> Folio balance
               </span>
               <strong className="text-sm text-secondary">
                 {formatKes(charge)}
@@ -868,7 +989,7 @@ function RoomCard({
           <select
             value={room.status}
             onChange={(e) => onStatus(e.target.value as RoomStatus)}
-            className="rounded-sm border bg-background px-2 py-2 text-xs font-semibold"
+            className={`rounded-sm border px-2 py-2 text-xs font-semibold ${room.status === "OCCUPIED" ? "bg-destructive/10 text-destructive" : room.status === "OUT_OF_SERVICE" ? "bg-warning/15 text-warning" : "bg-success/10 text-success"}`}
           >
             <option value="VACANT">Vacant</option>
             <option value="OCCUPIED">Occupied</option>
@@ -877,7 +998,7 @@ function RoomCard({
           <select
             value={room.cleanliness}
             onChange={(e) => onCleanliness(e.target.value as Cleanliness)}
-            className={`rounded-sm border px-2 py-2 text-xs font-semibold ${room.cleanliness === "CLEAN" ? "bg-success/10 text-success" : room.cleanliness === "DIRTY" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
+            className={`rounded-sm border px-2 py-2 text-xs font-semibold ${room.cleanliness === "CLEAN" ? "bg-success/10 text-success" : room.cleanliness === "DIRTY" ? "bg-destructive/10 text-destructive" : "bg-secondary/10 text-secondary"}`}
           >
             <option value="CLEAN">Clean</option>
             <option value="DIRTY">Dirty</option>

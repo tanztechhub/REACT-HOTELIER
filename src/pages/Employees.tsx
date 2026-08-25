@@ -50,6 +50,8 @@ type Employee = {
   supervisor: { id: string; firstName: string; lastName: string } | null
   roleId: string | null
   role: { id: string; name: string } | null
+  locationId: string | null
+  location: { id: string; name: string } | null
   salaryType: SalaryType
   salaryAmount: string
   paymentMethod: PaymentMethod
@@ -84,6 +86,7 @@ type EmployeeForm = {
   dateHired: string
   supervisorId: string
   roleId: string
+  locationId: string
   salaryType: SalaryType
   salaryAmount: string
   paymentMethod: PaymentMethod
@@ -102,7 +105,7 @@ type EmployeeForm = {
 const emptyForm: EmployeeForm = {
   firstName: '', lastName: '', gender: '', dateOfBirth: '', nationalId: '',
   phone: '', alternativePhone: '', email: '', address: '',
-  department: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '',
+  department: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '', locationId: '',
   salaryType: 'MONTHLY', salaryAmount: '', paymentMethod: 'BANK_TRANSFER', bankName: '', bankAccountNumber: '', mpesaNumber: '',
   kraPin: '', nssfNumber: '', shaNumber: '',
   employeeCode: '', pin: '',
@@ -128,6 +131,7 @@ export default function Employees() {
   const toast = useToast()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([])
+  const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
   const [summary, setSummary] = useState<Summary>({ total: 0, active: 0, onLeave: 0, suspended: 0, terminated: 0 })
   const [search, setSearch] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
@@ -169,6 +173,9 @@ export default function Employees() {
     api<{ roles: { id: string; name: string }[] }>('/roles')
       .then((response) => setRoles(response.roles))
       .catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load roles'))
+    api<{ locations: { id: string; name: string }[] }>('/locations')
+      .then((response) => setLocations(response.locations))
+      .catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load locations'))
   }, [toast])
 
   const initials = useMemo(() => (employee: Employee) => `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase(), [])
@@ -200,6 +207,7 @@ export default function Employees() {
       dateHired: employee.dateHired.slice(0, 10),
       supervisorId: employee.supervisorId ?? '',
       roleId: employee.roleId ?? '',
+      locationId: employee.locationId ?? '',
       salaryType: employee.salaryType,
       salaryAmount: employee.salaryAmount,
       paymentMethod: employee.paymentMethod,
@@ -444,6 +452,12 @@ export default function Employees() {
                 <select value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })} className="input">
                   <option value="">No role assigned</option>
                   {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Selling Location">
+                <select value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })} className="input">
+                  <option value="">Unassigned — can sell at any location</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </Field>
             </FieldGroup>

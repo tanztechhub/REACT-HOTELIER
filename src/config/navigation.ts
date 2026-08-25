@@ -9,6 +9,7 @@ import {
   LuFileText,
   LuSignature,
   LuReceipt,
+  LuReceiptText,
   LuListChecks,
   LuSearch,
   LuShoppingCart,
@@ -41,6 +42,10 @@ import {
   LuSettings,
   LuUserCog,
   LuBriefcaseBusiness,
+  LuMapPin,
+  LuPalette,
+  LuRuler,
+  LuHistory,
 } from 'react-icons/lu'
 
 export const PERMISSION_SECTIONS = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
@@ -84,6 +89,7 @@ export const navigation: NavGroup[] = [
     section: 'RECEPTION',
     items: [
       { label: 'Check In', href: '/reservations', icon: LuLogIn, moduleKey: 'RECEPTION' },
+      { label: 'Guest Stays', href: '/reception/stays', icon: LuHistory },
       { label: 'Room Management', href: '/rooms', icon: LuBedDouble, moduleKey: 'ROOMS' },
       { label: 'Services', href: '/reception/services', icon: LuConciergeBell },
       { label: 'Customers', href: '/reception/customers', icon: LuUsers },
@@ -108,7 +114,9 @@ export const navigation: NavGroup[] = [
     section: 'SALES',
     items: [
       { label: 'Point of Sale', href: '/pos', icon: LuShoppingCart, moduleKey: 'POS' },
+      { label: 'Products POS', href: '/sales/products-pos', icon: LuPackage },
       { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
+      { label: 'Receipts', href: '/sales/receipts', icon: LuReceiptText },
       { label: 'Customers', href: '/sales/customers', icon: LuUsers },
       { label: 'Riders', href: '/sales/riders', icon: LuBike },
       { label: 'Deliveries', href: '/sales/deliveries', icon: LuTruck },
@@ -169,7 +177,7 @@ export const navigation: NavGroup[] = [
     label: 'Finance',
     section: 'FINANCE',
     items: [
-      { label: 'Expenses', href: '/finance/expenses', icon: LuWallet, moduleKey: 'ACCOUNTING' },
+      { label: 'Daily Expenses', href: '/finance/expenses', icon: LuWallet, moduleKey: 'ACCOUNTING' },
       { label: 'Salaries', href: '/finance/salaries', icon: LuBanknote },
       { label: 'Transactions', href: '/finance/transactions', icon: LuArrowLeftRight },
       { label: 'Approvals', href: '/finance/approvals', icon: LuCircleCheck },
@@ -189,6 +197,9 @@ export const navigation: NavGroup[] = [
     section: 'SYSTEM',
     items: [
       { label: 'Business Information', href: '/business-information', icon: LuBriefcaseBusiness },
+      { label: 'Appearance', href: '/appearance', icon: LuPalette },
+      { label: 'Locations', href: '/locations', icon: LuMapPin },
+      { label: 'Units of Measure', href: '/units-of-measure', icon: LuRuler },
       { label: 'Users', href: '/users', icon: LuUserCog },
       { label: 'Settings', href: '/settings', icon: LuSettings },
     ],

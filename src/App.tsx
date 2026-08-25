@@ -19,6 +19,24 @@ import BusinessInformation from '@/pages/BusinessInformation'
 import Employees from '@/pages/Employees'
 import RolesAndPermissions from '@/pages/RolesAndPermissions'
 import Categories from '@/pages/Categories'
+import Recipes from '@/pages/Recipes'
+import MenuAndAddons from '@/pages/MenuAndAddons'
+import Tables from '@/pages/Tables'
+import Reports from '@/pages/Reports'
+import Receipts from '@/pages/Receipts'
+import Locations from '@/pages/Locations'
+import ThemeCustomizer from '@/pages/ThemeCustomizer'
+import Customers from '@/pages/Customers'
+import Services from '@/pages/Services'
+import UnitsOfMeasure from '@/pages/UnitsOfMeasure'
+import Stays from '@/pages/Stays'
+import PaymentMethods from '@/pages/PaymentMethods'
+import Transactions from '@/pages/Transactions'
+import Expenses from '@/pages/Expenses'
+import LostAndFound from '@/pages/LostAndFound'
+import ProductsPointOfSale from '@/pages/ProductsPointOfSale'
+import ServicesPointOfSale from '@/pages/ServicesPointOfSale'
+import Assets from '@/pages/Assets'
 import { navigation, sectionForPath, type PermissionSection } from '@/config/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { restoreSession } from '@/store/authSlice'
@@ -100,15 +118,44 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/settings" element={<CafeSettings />} />
         <Route path="/pos" element={<PointOfSale />} />
+        <Route path="/sales/products-pos" element={<ProductsPointOfSale />} />
+        <Route path="/service-center/pos" element={<ServicesPointOfSale />} />
         <Route path="/kitchen" element={<Kitchen />} />
         <Route path="/reservations" element={<Reception />} />
         <Route path="/rooms" element={<Rooms />} />
+        <Route path="/housekeeping/room-management" element={<Rooms />} />
         <Route path="/housekeeping" element={<Housekeeping />} />
         <Route path="/store" element={<InventoryWorkspace />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/service-center/products" element={<Products />} />
+        <Route path="/inventory/assets" element={<Assets />} />
         <Route path="/inventory/categories" element={<Categories />} />
+        <Route path="/kitchen/recipes" element={<Recipes />} />
+        <Route path="/kitchen/menu-addons" element={<MenuAndAddons />} />
+        <Route path="/sales/tables" element={<Tables />} />
+        <Route path="/sales/receipts" element={<Receipts />} />
+        <Route path="/reports" element={<Reports />} />
         <Route path="/users" element={<Users />} />
         <Route path="/business-information" element={<BusinessInformation />} />
+        <Route path="/locations" element={<Locations />} />
+        <Route path="/appearance" element={<ThemeCustomizer />} />
+        <Route path="/reception/customers" element={<Customers />} />
+        <Route path="/housekeeping/customers" element={<Customers />} />
+        <Route path="/sales/customers" element={<Customers />} />
+        <Route path="/service-center/customers" element={<Customers />} />
+        <Route path="/reception/services" element={<Services />} />
+        <Route path="/service-center/services" element={<Services />} />
+        <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
+        <Route path="/reception/stays" element={<Stays />} />
+        <Route path="/reception/payment-methods" element={<PaymentMethods />} />
+        <Route path="/sales/payment-methods" element={<PaymentMethods />} />
+        <Route path="/service-center/payment-methods" element={<PaymentMethods />} />
+        <Route path="/finance/transactions" element={<Transactions />} />
+        <Route path="/finance/expenses" element={<Expenses />} />
+        <Route path="/reception/daily-expenses" element={<Expenses />} />
+        <Route path="/kitchen/daily-expenses" element={<Expenses />} />
+        <Route path="/inventory/daily-expenses" element={<Expenses />} />
+        <Route path="/housekeeping/lost-and-found" element={<LostAndFound />} />
         <Route path="/team/employees" element={<Employees />} />
         <Route path="/team/roles-permissions" element={<RolesAndPermissions />} />
         {moduleRoutes.map((item) => (

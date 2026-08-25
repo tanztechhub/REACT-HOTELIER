@@ -6,6 +6,7 @@ import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
 const MAX_LEVEL = 3
+export type CategoryScope = 'STORE' | 'RESTAURANT' | 'BAR' | 'GYM' | 'SPA' | 'ROOMS' | 'ASSETS'
 
 type Category = {
   id: string
@@ -14,13 +15,15 @@ type Category = {
   parentId: string | null
   level: number
   isActive: boolean
-  _count: { children: number; products: number }
+  _count: { children: number; products: number; menuItems: number; assets: number }
 }
 
 type CategoryForm = { name: string; description: string; parentId: string; isActive: boolean }
 const emptyForm: CategoryForm = { name: '', description: '', parentId: '', isActive: true }
 
-export default function Categories() {
+type CategoriesProps = { scope?: CategoryScope; title?: string; subtitle?: string; embedded?: boolean }
+
+export default function Categories({ scope = 'STORE', title = 'Categories', subtitle = 'Organize store products up to three levels deep.', embedded = false }: CategoriesProps = {}) {
   const toast = useToast()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,7 +39,7 @@ export default function Categories() {
     setLoading(true)
     setError('')
     try {
-      const response = await api<{ categories: Category[] }>('/categories')
+      const response = await api<{ categories: Category[] }>(`/categories?scope=${scope}`)
       setCategories(response.categories)
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not load categories'
@@ -45,7 +48,7 @@ export default function Categories() {
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [scope, toast])
 
   useEffect(() => { void load() }, [load])
 
@@ -100,7 +103,7 @@ export default function Categories() {
     try {
       await api(editing ? `/categories/${editing.id}` : '/categories', {
         method: editing ? 'PATCH' : 'POST',
-        body: JSON.stringify(form),
+        body: JSON.stringify(editing ? form : { ...form, scope }),
       })
       setNotice(editing ? 'Category updated.' : 'Category created.')
       toast.success(editing ? 'Category updated.' : 'Category created.')
@@ -135,16 +138,16 @@ export default function Categories() {
   const summary = {
     total: categories.length,
     topLevel: roots.length,
-    withProducts: categories.filter((c) => c._count.products > 0).length,
+    inUse: categories.filter((c) => c._count.products + c._count.menuItems + c._count.assets > 0).length,
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className={embedded ? '' : 'mx-auto max-w-5xl px-6 py-8 sm:px-8 lg:px-10'}>
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-secondary">Inventory</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold">Categories</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Organize store products up to three levels deep.</p>
+          {!embedded && <p className="text-sm font-semibold text-secondary">Inventory</p>}
+          {embedded ? <h2 className="font-display text-xl font-semibold">{title}</h2> : <h1 className="mt-1 font-display text-3xl font-semibold">{title}</h1>}
+          <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         <button onClick={() => openCreate()} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
           <LuPlus /> Add category
@@ -155,7 +158,7 @@ export default function Categories() {
         {([
           ['Total categories', summary.total, <LuFolderTree key="a" />],
           ['Top-level categories', summary.topLevel, <LuTag key="b" />],
-          ['With products', summary.withProducts, <LuTag key="c" />],
+          ['In use', summary.inUse, <LuTag key="c" />],
         ] as const).map(([label, value, icon]) => (
           <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
             <div className="flex items-center justify-between text-muted-foreground">
@@ -271,6 +274,8 @@ function CategoryNode({ category, childrenOf, onAddChild, onEdit, onDelete }: {
             <p className="truncate font-semibold">{category.name}</p>
             {!category.isActive && <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Inactive</span>}
             {category._count.products > 0 && <span className="rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">{category._count.products} product{category._count.products === 1 ? '' : 's'}</span>}
+            {category._count.menuItems > 0 && <span className="rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">{category._count.menuItems} menu item{category._count.menuItems === 1 ? '' : 's'}</span>}
+            {category._count.assets > 0 && <span className="rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">{category._count.assets} asset{category._count.assets === 1 ? '' : 's'}</span>}
           </div>
           {category.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{category.description}</p>}
         </div>

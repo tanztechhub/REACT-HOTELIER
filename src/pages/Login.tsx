@@ -7,6 +7,14 @@ import { login } from '@/store/authSlice'
 import { fetchTenantContext } from '@/store/tenantSlice'
 import { useToast } from '@/components/ui/Toast'
 import { getErrorMessage } from '@/lib/errors'
+import { resolveLogoUrl } from '@/lib/api'
+
+const businessTypeLabel: Record<string, string> = {
+  HOTEL: 'Hotel',
+  MOTEL: 'Motel',
+  CAFE: 'Cafe',
+  RESTAURANT: 'Restaurant',
+}
 
 export default function Login() {
   const dispatch = useAppDispatch()
@@ -14,6 +22,7 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAppSelector((s) => s.auth.user)
+  const tenant = useAppSelector((s) => s.tenant)
   const [employeeCode, setEmployeeCode] = useState('')
   const [pin, setPin] = useState('')
   const [saving, setSaving] = useState(false)
@@ -44,7 +53,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-svh">
-      <div className="relative hidden w-1/2 overflow-hidden bg-gradient-to-br from-secondary to-accent lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <div className="relative hidden w-1/2 overflow-hidden bg-secondary lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div
           className="pointer-events-none absolute inset-0"
           style={{
@@ -62,17 +71,19 @@ export default function Login() {
         </div>
 
         <div className="relative flex items-center gap-3">
-          <img src="/PRIMARY.png" alt="Hotelier" className="size-10 rounded-sm object-contain" />
+          <img src={resolveLogoUrl(tenant.logoUrl) ?? '/PRIMARY.png'} alt={tenant.shortName ?? 'Hotelier'} className="size-10 rounded-sm object-contain" />
           <div>
-            <p className="font-display text-base font-semibold leading-none text-white">HOTELIER</p>
+            <p className="font-display text-base font-semibold leading-none text-white">{tenant.shortName ?? 'HOTELIER'}</p>
             <p className="mt-1 text-[11px] leading-none text-white/70">Hotel Management by TANZ</p>
           </div>
         </div>
 
         <div className="relative">
           <p className="text-sm font-medium text-white/80">Nice to see you again</p>
-          <h1 className="mt-2 font-display text-4xl font-semibold leading-tight text-white">
-            Welcome Back
+          <h1 className="mt-2 font-display text-[5rem] font-semibold leading-none text-white">
+            {businessTypeLabel[tenant.businessType] ?? 'Hotel'}
+            <br />
+            Management
           </h1>
           <div className="mt-4 h-1 w-12 rounded-full bg-white/50" />
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/80">
@@ -82,60 +93,72 @@ export default function Login() {
       </div>
 
       <div className="flex w-full flex-1 items-center justify-center bg-background px-6 py-12 lg:w-1/2">
-        <div className="w-full max-w-sm">
-          <p className="text-sm font-semibold text-secondary">Login Account</p>
-          <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">Sign in to your workspace</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Enter your employee code and PIN to continue.</p>
+        <div className="relative w-full max-w-sm ml-6 sm:ml-10">
+          {/* Decorative node-line, sitting to the left of the card. */}
+          <div className="pointer-events-none absolute -left-8 top-6 bottom-6 hidden sm:block" aria-hidden="true">
+            <span className="absolute -left-[3px] -top-1.5 block size-3 rounded-full bg-secondary" />
+            <span className="absolute top-0 bottom-0 left-0 w-px bg-secondary/40" />
+            <span className="absolute -left-[3px] -bottom-1.5 block size-3 rounded-full bg-secondary" />
+          </div>
 
-          {error && (
-            <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
-              <LuCircleAlert />
-              {error}
-            </div>
-          )}
+          {/* Tilted accent behind the card's top-left corner, in the Hotelier favicon's orange. */}
+          <div className="pointer-events-none absolute -left-3 -top-3 size-16 rotate-12 rounded-lg bg-[#f2921a] shadow-lg" aria-hidden="true" />
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            <label className="block text-sm font-medium">
-              Employee Code
-              <span className="relative mt-1.5 block">
-                <LuIdCard className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  required
-                  type="text"
-                  autoComplete="username"
-                  placeholder="e.g. EMP-0007"
-                  value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
-                  className="input pl-9!"
-                />
-              </span>
-            </label>
-            <label className="block text-sm font-medium">
-              PIN
-              <span className="relative mt-1.5 block">
-                <LuLock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  required
-                  type="password"
-                  inputMode="numeric"
-                  autoComplete="current-password"
-                  placeholder="Enter your PIN"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  className="input pl-9!"
-                />
-              </span>
-            </label>
+          <div className="relative rounded-lg border bg-card p-7 shadow-xl sm:p-8">
+            <p className="text-sm font-semibold text-secondary">Login Account</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">Sign in to your workspace</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Enter your employee code and PIN to continue.</p>
 
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-sm bg-secondary py-2.5 text-sm font-semibold text-secondary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
-            >
-              {saving && <LuLoaderCircle className="animate-spin" />}
-              Sign In
-            </button>
-          </form>
+            {error && (
+              <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
+                <LuCircleAlert />
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+              <label className="block text-sm font-medium">
+                Employee Code
+                <span className="relative mt-1.5 block">
+                  <LuIdCard className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    required
+                    type="text"
+                    autoComplete="username"
+                    placeholder="e.g. EMP-0007"
+                    value={employeeCode}
+                    onChange={(e) => setEmployeeCode(e.target.value)}
+                    className="input pl-9!"
+                  />
+                </span>
+              </label>
+              <label className="block text-sm font-medium">
+                PIN
+                <span className="relative mt-1.5 block">
+                  <LuLock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    required
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="current-password"
+                    placeholder="Enter your PIN"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    className="input pl-9!"
+                  />
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-sm bg-secondary py-2.5 text-sm font-semibold text-secondary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                {saving && <LuLoaderCircle className="animate-spin" />}
+                Sign In
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

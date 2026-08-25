@@ -1,10 +1,13 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu'
+import { LuChevronLeft, LuChevronRight, LuLogOut } from 'react-icons/lu'
+import { IoPersonCircleSharp } from 'react-icons/io5'
 import { navigation, type PermissionSection } from '@/config/navigation'
 import { cn } from '@/lib/utils'
-import { useAppSelector } from '@/store/hooks'
+import { useAppDispatch, useAppSelector } from '@/store/hooks'
+import { logout } from '@/store/authSlice'
+import { resolveLogoUrl } from '@/lib/api'
 
 const EXPANDED_WIDTH = 264
 const COLLAPSED_WIDTH = 80
@@ -12,8 +15,18 @@ const DEFAULT_SECTIONS: PermissionSection[] = ['OVERVIEW']
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+  const user = useAppSelector((s) => s.auth.user)
+  const logoUrl = useAppSelector((s) => s.tenant.logoUrl)
+  const shortName = useAppSelector((s) => s.tenant.shortName)
   const allowedSections = useAppSelector((s) => s.auth.user?.role?.allowedSections) ?? DEFAULT_SECTIONS
   const visibleNavigation = navigation.filter((group) => allowedSections.includes(group.section))
+
+  function handleLogout() {
+    void dispatch(logout())
+    navigate('/login', { replace: true })
+  }
 
   return (
     <motion.aside
@@ -21,6 +34,14 @@ export default function Sidebar() {
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
       className="relative z-20 flex h-svh flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
     >
+      <button
+        type="button"
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        className="absolute -right-3.5 top-8 z-30 flex size-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition-colors hover:text-foreground"
+      >
+        {collapsed ? <LuChevronRight className="size-4" /> : <LuChevronLeft className="size-4" />}
+      </button>
       {/* Brand */}
       <div
         className={cn(
@@ -28,7 +49,7 @@ export default function Sidebar() {
           collapsed && 'justify-center px-0',
         )}
       >
-        <img src="/PRIMARY.png" alt="Hotelier" className="size-10 shrink-0 rounded-sm object-contain" />
+        <img src={resolveLogoUrl(logoUrl) ?? '/PRIMARY.png'} alt={shortName ?? 'Hotelier'} className="size-10 shrink-0 rounded-sm object-contain" />
         <AnimatePresence initial={false}>
           {!collapsed && (
             <motion.div
@@ -39,7 +60,7 @@ export default function Sidebar() {
               className="overflow-hidden whitespace-nowrap"
             >
               <p className="font-display text-[15px] font-semibold leading-none tracking-tight text-white">
-                HOTELIER
+                {shortName ?? 'HOTELIER'}
               </p>
               <p className="mt-1 text-[11px] leading-none text-sidebar-muted">
                 Hotel Management by TANZ
@@ -125,36 +146,41 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer / collapse toggle */}
-      <div className="shrink-0 border-t border-sidebar-border p-3">
-        <button
-          type="button"
-          onClick={() => setCollapsed((v) => !v)}
-          className={cn(
-            'flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-[13.5px] font-medium text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white',
-            collapsed && 'justify-center px-0',
-          )}
-        >
-          {collapsed ? (
-            <LuPanelLeftOpen className="size-[18px] shrink-0" />
-          ) : (
-            <LuPanelLeftClose className="size-[18px] shrink-0" />
-          )}
-          <AnimatePresence initial={false}>
-            {!collapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.15 }}
-                className="overflow-hidden whitespace-nowrap"
-              >
-                Collapse
-              </motion.span>
+      {/* Footer / signed-in user */}
+      {user && (
+        <div className="shrink-0 border-t border-sidebar-border p-3">
+          <div
+            className={cn(
+              'flex items-center gap-2.5 rounded-sm bg-card p-2.5 shadow-sm',
+              collapsed && 'flex-col gap-1.5 p-2',
             )}
-          </AnimatePresence>
-        </button>
-      </div>
+          >
+            <IoPersonCircleSharp className="size-9 shrink-0 text-secondary" />
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.div
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="min-w-0 flex-1 overflow-hidden"
+                >
+                  <p className="truncate text-[13px] font-semibold text-foreground">{user.firstName} {user.lastName}</p>
+                  <p className="truncate text-[11.5px] font-medium text-muted-foreground">{user.role?.name ?? user.jobTitle}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Log out"
+              className="shrink-0 rounded-sm p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"
+            >
+              <LuLogOut className="size-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </motion.aside>
   )
 }

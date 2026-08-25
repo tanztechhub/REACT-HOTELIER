@@ -13,9 +13,21 @@ const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api'
 const devTenantId = import.meta.env.VITE_TENANT_ID ?? ''
 const appDomain = import.meta.env.VITE_APP_DOMAIN ?? ''
 
-export type ResolvedTenant = { tenantId: string; name: string; slug: string }
+export type ResolvedTenant = {
+  tenantId: string
+  name: string
+  slug: string
+  themeBaseColor: string
+  themeAccentColor: string
+  themeFont: string
+  logoUrl: string | null
+  shortName: string | null
+  businessType: string
+}
 
-function slugFromHost(): string | null {
+// Exported so main.tsx can resolve the same slug synchronously, pre-render,
+// to read a cached theme before the /tenant/resolve network call lands.
+export function slugFromHost(): string | null {
   const params = new URLSearchParams(window.location.search)
   const override = params.get('tenant')
   if (override) return override
@@ -34,13 +46,55 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
     if (!devTenantId) {
       throw new Error('No workspace could be resolved. Set VITE_TENANT_ID in REACT/.env for local development.')
     }
-    return { tenantId: devTenantId, name: 'Local Dev Workspace', slug: 'dev' }
+    // No slug in local dev, so /tenant/resolve can't be used — fetch the
+    // theme directly by tenant id instead (tenantContext reads x-tenant-id
+    // with no auth required, same as every other pre-login-safe route here).
+    const fallback: ResolvedTenant = {
+      tenantId: devTenantId, name: 'Local Dev Workspace', slug: 'dev',
+      themeBaseColor: '#1c74d1', themeAccentColor: '#43a047', themeFont: 'jost',
+      logoUrl: null, shortName: null, businessType: 'HOTEL',
+    }
+    try {
+      const response = await fetch(`${apiUrl}/business-profile`, { headers: { 'x-tenant-id': devTenantId } })
+      const data = await response.json() as {
+        profile?: { themeBaseColor: string; themeAccentColor: string; themeFont: string; logoUrl: string | null; shortName: string | null; businessType: string } | null
+      }
+      if (!response.ok || !data.profile) return fallback
+      return {
+        ...fallback,
+        themeBaseColor: data.profile.themeBaseColor,
+        themeAccentColor: data.profile.themeAccentColor,
+        themeFont: data.profile.themeFont,
+        logoUrl: data.profile.logoUrl,
+        shortName: data.profile.shortName,
+        businessType: data.profile.businessType,
+      }
+    } catch {
+      return fallback
+    }
   }
 
   const response = await fetch(`${apiUrl}/tenant/resolve?slug=${encodeURIComponent(slug)}`)
-  const data = await response.json() as { tenant?: { id: string; name: string; slug: string }; error?: string }
+  const data = await response.json() as {
+    tenant?: {
+      id: string; name: string; slug: string
+      themeBaseColor: string; themeAccentColor: string; themeFont: string
+      logoUrl: string | null; shortName: string | null; businessType: string
+    }
+    error?: string
+  }
   if (!response.ok || !data.tenant) {
     throw new Error(data.error ?? 'This workspace could not be found.')
   }
-  return { tenantId: data.tenant.id, name: data.tenant.name, slug: data.tenant.slug }
+  return {
+    tenantId: data.tenant.id,
+    name: data.tenant.name,
+    slug: data.tenant.slug,
+    themeBaseColor: data.tenant.themeBaseColor,
+    themeAccentColor: data.tenant.themeAccentColor,
+    themeFont: data.tenant.themeFont,
+    logoUrl: data.tenant.logoUrl,
+    shortName: data.tenant.shortName,
+    businessType: data.tenant.businessType,
+  }
 }

@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api } from '@/lib/api'
 
 export type AuthRole = { id: string; name: string; allowedSections: string[] }
+export type AuthLocation = { id: string; name: string }
 
 export type AuthUser = {
   id: string
@@ -11,6 +12,7 @@ export type AuthUser = {
   jobTitle: string
   department: string
   role: AuthRole | null
+  location: AuthLocation | null
 }
 
 export type AuthState = {
