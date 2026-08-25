@@ -27,7 +27,6 @@ const movementLabels: Record<(typeof MOVEMENT_TYPES)[number], string> = { RECEIP
 type Category = { id: string; name: string; level: number }
 type Location = { id: string; name: string }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
-type Movement = { id: string; type: (typeof MOVEMENT_TYPES)[number]; quantity: string; unitCost: string | null; paymentMethod: { id: string; name: string } | null; reference: string | null; note: string | null; occurredAt: string }
 type Asset = {
   id: string
   assetNo: string

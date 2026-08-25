@@ -290,15 +290,22 @@ export default function Tables() {
       )}
 
       {panel && (panel.kind === 'takeaway' || panel.orderId !== null) && (
-        <OrderSettlementPanel
-          orderId={panel.kind === 'table' ? panel.orderId! : panel.summary.id}
-          title={panel.kind === 'table' ? `${panel.table.label}${panel.table.area ? ` · ${panel.table.area}` : ''}` : 'Takeaway'}
-          subtitle={panel.kind === 'table' && panel.table.activeOrders.length > 1 ? '← multiple orders on this table' : undefined}
-          profile={profile}
-          paymentMethods={paymentMethods}
-          onClose={() => setPanel(null)}
-          onChanged={() => void load()}
-        />
+        <>
+          <OrderSettlementPanel
+            orderId={panel.kind === 'table' ? panel.orderId! : panel.summary.id}
+            title={panel.kind === 'table' ? `${panel.table.label}${panel.table.area ? ` · ${panel.table.area}` : ''}` : 'Takeaway'}
+            subtitle={panel.kind === 'table' && panel.table.activeOrders.length > 1 ? 'One of several orders on this table' : undefined}
+            profile={profile}
+            paymentMethods={paymentMethods}
+            onClose={() => setPanel(null)}
+            onChanged={() => void load()}
+          />
+          {panel.kind === 'table' && panel.table.activeOrders.length > 1 && (
+            <button onClick={backToOrderList} className="fixed left-4 top-4 z-[70] rounded-sm border bg-card px-3 py-1.5 text-xs font-semibold shadow-lg hover:bg-muted">
+              ← Back to order list
+            </button>
+          )}
+        </>
       )}
     </div>
   )
