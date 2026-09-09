@@ -169,7 +169,13 @@
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    font-synthesis: none;
+    /* Jost (the default) has a very light 400 — running body text at 500
+       (medium) makes it read closer to the desktop app. Variable fonts
+       honour this exactly; every fixed-weight alternate (Inter, Poppins, …)
+       also loads a real 500 face, so no faux-bold. Tune here (400 = stock,
+       600 = semibold). */
+    font-weight: var(--font-weight-base, 500);
+    font-synthesis: weight;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

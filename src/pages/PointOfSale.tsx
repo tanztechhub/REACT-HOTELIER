@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
+  LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
   LuPause, LuPlus, LuReceiptText, LuSearch, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useAppSelector } from '@/store/hooks'
 import { cn } from '@/lib/utils'
-import CustomerPicker, { type PickedCustomer } from '@/components/pos/CustomerPicker'
+import CustomerSelectModal, { partyLabel, type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 
@@ -67,7 +67,8 @@ export default function PointOfSale() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
   const [tableId, setTableId] = useState('')
-  const [customer, setCustomer] = useState<PickedCustomer | null>(null)
+  const [party, setParty] = useState<SaleParty>({ kind: 'WALK_IN' })
+  const [customerModalOpen, setCustomerModalOpen] = useState(false)
   const [discount, setDiscount] = useState('0')
   const [heldSales, setHeldSales] = useState<HeldSale[]>([])
   const [loading, setLoading] = useState(true)
@@ -189,7 +190,7 @@ export default function PointOfSale() {
     setTableId('')
     setDiscount('0')
     setConfirmation(null)
-    setCustomer(null)
+    setParty({ kind: 'WALK_IN' })
   }
 
   function holdSale() {
@@ -220,7 +221,8 @@ export default function PointOfSale() {
         body: JSON.stringify({
           tableId: tableId || undefined,
           locationId: effectiveLocationId || undefined,
-          customerId: customer?.id,
+          customerId: party.kind === 'WALK_IN' ? undefined : party.customer.id,
+          reservationId: party.kind === 'ROOM' ? party.reservationId : undefined,
           discount: financials.discount,
           items: cart.map((item) => ({
             menuItemId: item.id,
@@ -414,28 +416,46 @@ export default function PointOfSale() {
               </div>
             )}
 
-            <div className="flex flex-col rounded-sm border border-border bg-card shadow-sm">
-              <div className="flex items-center gap-3 border-b p-4">
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-dashed border-[#f2921a] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#f2921a]">
-                  <span className="size-1.5 rounded-full bg-[#f2921a]" /> New Sale
-                </span>
+            <div className="flex flex-col overflow-hidden rounded-lg border-2 border-secondary/40 bg-card shadow-md">
+              <div className="flex items-start justify-between gap-3 border-b p-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Current Sale</p>
+                  <button type="button" onClick={() => setCustomerModalOpen(true)} className="mt-1.5 flex max-w-full items-center gap-2 text-left">
+                    {party.kind === 'ROOM'
+                      ? <LuBedDouble className="size-4 shrink-0 text-secondary" />
+                      : <LuUserRound className="size-4 shrink-0 text-primary" />}
+                    <span className="truncate text-lg font-semibold text-foreground">{partyLabel(party)}</span>
+                    <LuChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                  {party.kind === 'ROOM' && (
+                    <p className="mt-1 text-xs font-semibold text-secondary">Charges to Room {party.roomNumber} at settlement</p>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="flex size-14 flex-col items-center justify-center rounded-full border-2 border-dashed border-secondary text-[9px] font-bold uppercase leading-none tracking-wide text-secondary">
+                    <span>Open</span>
+                    <span className="mt-0.5">Sale</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={resetSale}
+                    disabled={cart.length === 0 && party.kind === 'WALK_IN' && !tableId}
+                    title="Clear this sale"
+                    className="rounded-sm p-1 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive disabled:pointer-events-none disabled:opacity-30"
+                  >
+                    <LuTrash2 className="size-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="border-b p-4">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Table</label>
+              <div className="border-b px-4 py-3">
+                <label className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Table</label>
                 <select aria-label="Table" value={tableId} onChange={(event) => setTableId(event.target.value)} className="mt-1.5 w-full rounded-sm border bg-background px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring">
                   <option value="">Takeaway</option>
                   {/* A table can carry several separate orders at once — only
                       one actually out of service is unselectable. */}
                   {tables.map((t) => <option key={t.id} value={t.id} disabled={t.status === 'OUT_OF_SERVICE'}>{t.label}{t.area ? ` (${t.area})` : ''}{t.status === 'OCCUPIED' ? ' — in use' : t.status === 'OUT_OF_SERVICE' ? ' — out of service' : ''}</option>)}
                 </select>
-              </div>
-
-              <div className="border-b p-4">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer</label>
-                <div className="mt-1.5">
-                  <CustomerPicker customer={customer} onChange={setCustomer} />
-                </div>
               </div>
 
               <div className="max-h-96 overflow-y-auto p-4">
@@ -518,6 +538,10 @@ export default function PointOfSale() {
         </div>
       )}
 
+      {customerModalOpen && (
+        <CustomerSelectModal party={party} onChange={setParty} onClose={() => setCustomerModalOpen(false)} />
+      )}
+
       {settlementOrderId && (
         <OrderSettlementPanel
           orderId={settlementOrderId}
@@ -552,8 +576,18 @@ function AddItemsModal({ order, menuItems, onClose, onAdded }: {
 }) {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartItem[]>([])
+  const [existingItems, setExistingItems] = useState<{ id: string; name: string; quantity: number; addons: string[] }[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // What the customer already has on this order — shown read-only so the
+  // cashier isn't ringing up a fresh round blind. Adding a line that's
+  // already here just bumps its quantity server-side (POST .../items).
+  useEffect(() => {
+    api<{ order: { items: { id: string; quantity: number; menuItem: { name: string }; addons: { addon: { name: string } }[] }[] } }>(`/pos/orders/${order.id}`)
+      .then((r) => setExistingItems(r.order.items.map((i) => ({ id: i.id, name: i.menuItem.name, quantity: i.quantity, addons: i.addons.map((a) => a.addon.name) }))))
+      .catch(() => setExistingItems([]))
+  }, [order.id])
 
   const visibleItems = menuItems.filter((item) => !search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()))
   const total = cart.reduce((sum, item) => sum + (item.price + item.selectedAddons.reduce((s, a) => s + a.price, 0)) * item.quantity, 0)
@@ -625,6 +659,20 @@ function AddItemsModal({ order, menuItems, onClose, onAdded }: {
           </div>
 
           <div className="flex flex-col overflow-y-auto border-t bg-muted/20 p-4 lg:border-l lg:border-t-0">
+            {existingItems.length > 0 && (
+              <div className="mb-3 border-b pb-3">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">On this order now</p>
+                <div className="space-y-1">
+                  {existingItems.map((i) => (
+                    <p key={i.id} className="truncate text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">{i.quantity}&times;</span> {i.name}
+                      {i.addons.length > 0 && ` · ${i.addons.join(', ')}`}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+            {existingItems.length > 0 && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Adding</p>}
             {cart.length === 0 ? (
               <p className="text-center text-xs text-muted-foreground">No items added yet.</p>
             ) : (

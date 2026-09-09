@@ -37,6 +37,10 @@ import LostAndFound from '@/pages/LostAndFound'
 import ProductsPointOfSale from '@/pages/ProductsPointOfSale'
 import ServicesPointOfSale from '@/pages/ServicesPointOfSale'
 import Assets from '@/pages/Assets'
+import StockLedger from '@/pages/StockLedger'
+import Suppliers from '@/pages/Suppliers'
+import Purchases from '@/pages/Purchases'
+import PurchaseRequisitions from '@/pages/PurchaseRequisitions'
 import { navigation, sectionForPath, type PermissionSection } from '@/config/navigation'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { restoreSession } from '@/store/authSlice'
@@ -129,6 +133,10 @@ function App() {
         <Route path="/products" element={<Products />} />
         <Route path="/service-center/products" element={<Products />} />
         <Route path="/inventory/assets" element={<Assets />} />
+        <Route path="/inventory/stock-ledger" element={<StockLedger />} />
+        <Route path="/inventory/suppliers" element={<Suppliers />} />
+        <Route path="/inventory/purchases" element={<Purchases />} />
+        <Route path="/inventory/purchase-requisitions" element={<PurchaseRequisitions />} />
         <Route path="/inventory/categories" element={<Categories />} />
         <Route path="/kitchen/recipes" element={<Recipes />} />
         <Route path="/kitchen/menu-addons" element={<MenuAndAddons />} />

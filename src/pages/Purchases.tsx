@@ -1,0 +1,536 @@
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import type { FormEvent, ReactNode } from 'react'
+import {
+  LuCircleAlert,
+  LuCircleCheck,
+  LuLoaderCircle,
+  LuPencil,
+  LuPlus,
+  LuPrinter,
+  LuSearch,
+  LuTrash2,
+  LuX,
+} from 'react-icons/lu'
+import { api, hasApiTenant } from '@/lib/api'
+import { useToast } from '@/components/ui/Toast'
+import { cn } from '@/lib/utils'
+import type { DocProfile } from '@/components/documents/pdf'
+
+const DocumentViewer = lazy(() => import('@/components/documents/DocumentViewer'))
+
+type Status = 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'
+const STATUS_META: Record<Status, { label: string; className: string }> = {
+  DRAFT: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
+  ORDERED: { label: 'Ordered', className: 'bg-secondary/10 text-secondary' },
+  RECEIVED: { label: 'Received', className: 'bg-success/10 text-success' },
+  CANCELLED: { label: 'Cancelled', className: 'bg-destructive/10 text-destructive' },
+}
+const NEXT_ACTIONS: Record<Status, { to: Status; label: string }[]> = {
+  DRAFT: [{ to: 'ORDERED', label: 'Mark ordered' }, { to: 'CANCELLED', label: 'Cancel' }],
+  ORDERED: [{ to: 'RECEIVED', label: 'Mark received' }, { to: 'CANCELLED', label: 'Cancel' }],
+  RECEIVED: [],
+  CANCELLED: [],
+}
+
+type Supplier = { id: string; name: string }
+type Product = { id: string; name: string; unit: string }
+type Employee = { id: string; firstName: string; lastName: string }
+type PurchaseItem = {
+  id: string
+  productId: string
+  quantity: string
+  unitCost: string
+  lineTotal: string
+  note: string | null
+  product: { id: string; name: string; unit: string }
+}
+type Purchase = {
+  id: string
+  purchaseNo: string
+  status: Status
+  orderDate: string
+  expectedDate: string | null
+  reference: string | null
+  notes: string | null
+  taxRate: string
+  subtotal: string
+  taxAmount: string
+  total: string
+  supplier: { id: string; name: string }
+  requisition: { id: string; requisitionNo: string } | null
+  items: PurchaseItem[]
+  orderedAt: string | null
+  receivedAt: string | null
+  createdAt: string
+  updatedAt: string
+  createdByEmployee: Employee | null
+  updatedByEmployee: Employee | null
+}
+type Summary = { total: number; byStatus: Record<Status, number>; openValue: number }
+
+type LineRow = { productId: string; quantity: string; unitCost: string; note: string }
+type PurchaseForm = {
+  supplierId: string
+  orderDate: string
+  expectedDate: string
+  reference: string
+  taxRate: string
+  notes: string
+  items: LineRow[]
+}
+const emptyForm: PurchaseForm = { supplierId: '', orderDate: '', expectedDate: '', reference: '', taxRate: '0', notes: '', items: [] }
+
+const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : '')
+const todayInput = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function SetupMessage() {
+  return <div className="mx-auto max-w-7xl px-6 py-16 text-center"><p className="text-sm text-muted-foreground">Workspace not resolved yet.</p></div>
+}
+
+export default function Purchases() {
+  const toast = useToast()
+  const [purchases, setPurchases] = useState<Purchase[]>([])
+  const [summary, setSummary] = useState<Summary>({ total: 0, byStatus: { DRAFT: 0, ORDERED: 0, RECEIVED: 0, CANCELLED: 0 }, openValue: 0 })
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | Status>('all')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState<Purchase | null>(null)
+  const [form, setForm] = useState<PurchaseForm>(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+
+  const [detail, setDetail] = useState<Purchase | null>(null)
+  const [working, setWorking] = useState(false)
+  const [productQuery, setProductQuery] = useState('')
+  const [profile, setProfile] = useState<DocProfile>(null)
+  const [printing, setPrinting] = useState<Purchase | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const query = new URLSearchParams()
+      if (search.trim()) query.set('search', search.trim())
+      if (statusFilter !== 'all') query.set('status', statusFilter)
+      const response = await api<{ purchases: Purchase[]; summary: Summary }>(`/purchases${query.size ? `?${query}` : ''}`)
+      setPurchases(response.purchases)
+      setSummary(response.summary)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not load purchases'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [search, statusFilter, toast])
+
+  useEffect(() => { const t = window.setTimeout(() => void load(), 250); return () => window.clearTimeout(t) }, [load])
+  useEffect(() => {
+    api<{ suppliers: Supplier[] }>('/suppliers?active=true').then((r) => setSuppliers(r.suppliers)).catch(() => {})
+    api<{ products: Product[] }>('/products?active=true').then((r) => setProducts(r.products)).catch(() => {})
+    api<{ profile: DocProfile }>('/business-profile').then((r) => setProfile(r.profile)).catch(() => {})
+  }, [])
+
+  const productLabel = useMemo(() => {
+    const map = new Map(products.map((p) => [p.id, p]))
+    return (id: string) => map.get(id)
+  }, [products])
+
+  const liveTotals = useMemo(() => {
+    const subtotal = form.items.reduce((sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.unitCost) || 0), 0)
+    const taxAmount = subtotal * ((Number(form.taxRate) || 0) / 100)
+    return { subtotal, taxAmount, total: subtotal + taxAmount }
+  }, [form.items, form.taxRate])
+
+  const productMatches = useMemo(() => {
+    const q = productQuery.trim().toLowerCase()
+    if (!q) return []
+    const chosen = new Set(form.items.map((i) => i.productId))
+    return products.filter((p) => !chosen.has(p.id) && p.name.toLowerCase().includes(q)).slice(0, 8)
+  }, [productQuery, products, form.items])
+
+  function addProduct(p: Product) {
+    setForm((f) => (f.items.some((i) => i.productId === p.id) ? f : { ...f, items: [...f.items, { productId: p.id, quantity: '', unitCost: '', note: '' }] }))
+    setProductQuery('')
+  }
+
+  function openCreate() {
+    setEditing(null)
+    setForm({ ...emptyForm, orderDate: todayInput() })
+    setProductQuery('')
+    setFormError('')
+    setShowForm(true)
+  }
+
+  function openEdit(purchase: Purchase) {
+    setEditing(purchase)
+    setProductQuery('')
+    setForm({
+      supplierId: purchase.supplier.id,
+      orderDate: toDateInput(purchase.orderDate),
+      expectedDate: toDateInput(purchase.expectedDate),
+      reference: purchase.reference ?? '',
+      taxRate: purchase.taxRate ?? '0',
+      notes: purchase.notes ?? '',
+      items: purchase.items.map((i) => ({ productId: i.productId, quantity: String(Number(i.quantity)), unitCost: String(Number(i.unitCost)), note: i.note ?? '' })),
+    })
+    setFormError('')
+    setShowForm(true)
+  }
+
+  function setRow(index: number, patch: Partial<LineRow>) {
+    setForm((f) => ({ ...f, items: f.items.map((r, i) => (i === index ? { ...r, ...patch } : r)) }))
+  }
+  const removeRow = (index: number) => setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== index) }))
+
+  async function savePurchase(event: FormEvent) {
+    event.preventDefault()
+    const items = form.items
+      .filter((r) => r.productId && Number(r.quantity) > 0)
+      .map((r) => ({ productId: r.productId, quantity: Number(r.quantity), unitCost: Number(r.unitCost) || 0, note: r.note.trim() || undefined }))
+    if (!form.supplierId) { setFormError('Choose a supplier'); return }
+    if (!items.length) { setFormError('Add at least one item with a quantity'); return }
+    setSaving(true)
+    setFormError('')
+    setNotice('')
+    try {
+      const payload = {
+        supplierId: form.supplierId,
+        orderDate: form.orderDate || undefined,
+        expectedDate: form.expectedDate || undefined,
+        reference: form.reference.trim() || undefined,
+        taxRate: Number(form.taxRate) || 0,
+        notes: form.notes.trim() || undefined,
+        items,
+      }
+      await api(editing ? `/purchases/${editing.id}` : '/purchases', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
+      setNotice(editing ? 'Purchase updated.' : 'Purchase created.')
+      toast.success(editing ? 'Purchase updated.' : 'Purchase created.')
+      setShowForm(false)
+      await load()
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not save purchase'
+      setFormError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function changeStatus(purchase: Purchase, to: Status) {
+    const verb = to === 'CANCELLED' ? 'Cancel' : to === 'ORDERED' ? 'Mark as ordered' : 'Mark as received'
+    if (!window.confirm(`${verb} — ${purchase.purchaseNo}?`)) return
+    setWorking(true)
+    setNotice('')
+    try {
+      const { purchase: updated } = await api<{ purchase: Purchase }>(`/purchases/${purchase.id}/status`, { method: 'POST', body: JSON.stringify({ status: to }) })
+      setNotice(`${purchase.purchaseNo} is now ${STATUS_META[to].label.toLowerCase()}.`)
+      toast.success('Status updated.')
+      setDetail((d) => (d && d.id === updated.id ? updated : d))
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not change status')
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function deletePurchase(purchase: Purchase) {
+    if (!window.confirm(`Delete draft ${purchase.purchaseNo}? This cannot be undone.`)) return
+    try {
+      await api(`/purchases/${purchase.id}`, { method: 'DELETE' })
+      setNotice('Draft purchase deleted.')
+      toast.success('Draft purchase deleted.')
+      setDetail(null)
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not delete purchase')
+    }
+  }
+
+  if (!hasApiTenant()) return <SetupMessage />
+
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-secondary">Inventory</p>
+          <h1 className="mt-1 font-display text-3xl font-semibold">Purchases</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Purchase orders raised against a supplier. A document for now — receiving stock into the store comes later.</p>
+        </div>
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <LuPlus /> New purchase
+        </button>
+      </header>
+
+      <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {([
+          ['Total', summary.total],
+          ['Draft', summary.byStatus.DRAFT],
+          ['Ordered', summary.byStatus.ORDERED],
+          ['Open value', formatKes(summary.openValue)],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
+            <span className="text-sm font-medium text-muted-foreground">{label}</span>
+            <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
+          </div>
+        ))}
+      </section>
+
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+      {notice && <div className="mt-5 flex items-center gap-2 rounded-sm border border-success/25 bg-success/10 p-3 text-sm text-success"><LuCircleCheck />{notice}</div>}
+
+      <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
+          <label className="relative flex-1">
+            <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search PO number, supplier or reference…" className="w-full rounded-sm border bg-background py-2.5 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
+          </label>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | Status)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring">
+            <option value="all">All statuses</option>
+            {(Object.keys(STATUS_META) as Status[]).map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading purchases…</div>
+        ) : purchases.length === 0 ? (
+          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">No purchases yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3">Purchase</th>
+                  <th className="px-5 py-3">Supplier</th>
+                  <th className="px-5 py-3">Items</th>
+                  <th className="px-5 py-3 text-right">Total</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {purchases.map((p) => (
+                  <tr key={p.id} className="border-t transition hover:bg-muted/30">
+                    <td className="px-5 py-4">
+                      <button onClick={() => setDetail(p)} className="font-semibold text-secondary hover:underline">{p.purchaseNo}</button>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(p.orderDate).toLocaleDateString()}
+                        {p.requisition && <> · from {p.requisition.requisitionNo}</>}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-muted-foreground">{p.supplier.name}</td>
+                    <td className="px-5 py-4 text-muted-foreground">{p.items.length}</td>
+                    <td className="px-5 py-4 text-right font-semibold tabular-nums">{formatKes(Number(p.total))}</td>
+                    <td className="px-5 py-4">
+                      <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', STATUS_META[p.status].className)}>{STATUS_META[p.status].label}</span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setPrinting(p)} title="Print / PDF" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPrinter /></button>
+                        {NEXT_ACTIONS[p.status].filter((a) => a.to !== 'CANCELLED').map((a) => (
+                          <button key={a.to} onClick={() => void changeStatus(p, a.to)} disabled={working} className="rounded-sm border px-2.5 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50">{a.label}</button>
+                        ))}
+                        {p.status === 'DRAFT' && (
+                          <>
+                            <button onClick={() => openEdit(p)} title="Edit" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil /></button>
+                            <button onClick={() => void deletePurchase(p)} title="Delete" className="rounded-sm p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 /></button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowForm(false) }}>
+          <form onSubmit={savePurchase} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+            <div>
+              <p className="text-sm font-semibold text-secondary">{editing ? 'Edit purchase' : 'New purchase'}</p>
+              <h2 className="mt-1 font-display text-2xl font-semibold">{editing ? editing.purchaseNo : 'Raise a purchase order'}</h2>
+            </div>
+
+            <FieldGroup title="Order">
+              <Field label="Supplier" required>
+                <select required className="input" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
+                  <option value="">Select supplier</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Reference"><input placeholder="Supplier invoice / quote no." value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="input" /></Field>
+              <Field label="Order Date"><input type="date" value={form.orderDate} onChange={(e) => setForm({ ...form, orderDate: e.target.value })} className="input" /></Field>
+              <Field label="Expected Date"><input type="date" value={form.expectedDate} onChange={(e) => setForm({ ...form, expectedDate: e.target.value })} className="input" /></Field>
+              <Field label="Tax Rate (%)"><input type="number" min="0" max="100" step="0.01" value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input" /></Field>
+            </FieldGroup>
+
+            <div className="mt-6 border-t pt-5">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items</p>
+
+              <div className="relative">
+                <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input value={productQuery} onChange={(e) => setProductQuery(e.target.value)} placeholder="Search products to add…" className="w-full rounded-sm border bg-background py-2.5 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
+                {productQuery.trim() && (
+                  <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-sm border bg-card shadow-lg">
+                    {productMatches.length === 0 ? (
+                      <p className="px-3 py-2 text-sm text-muted-foreground">No matching products.</p>
+                    ) : productMatches.map((p) => (
+                      <button key={p.id} type="button" onClick={() => addProduct(p)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-muted">
+                        <span className="truncate">{p.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">per {p.unit}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {form.items.length === 0 ? (
+                <p className="mt-3 rounded-sm border border-dashed p-4 text-center text-sm text-muted-foreground">No items yet — search above to add products.</p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="grid grid-cols-[1fr_5rem_6rem_6.5rem_2rem] gap-2 px-1 text-xs font-medium text-muted-foreground">
+                    <span>Product</span><span>Qty</span><span>Unit cost</span><span className="text-right">Total</span><span />
+                  </div>
+                  {form.items.map((row, index) => {
+                    const product = productLabel(row.productId)
+                    const lineTotal = (Number(row.quantity) || 0) * (Number(row.unitCost) || 0)
+                    return (
+                      <div key={row.productId} className="grid grid-cols-[1fr_5rem_6rem_6.5rem_2rem] items-center gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{product?.name ?? 'Unknown product'}</p>
+                          {product?.unit && <p className="text-xs text-muted-foreground">per {product.unit}</p>}
+                        </div>
+                        <input type="number" min="0" step="0.001" placeholder="Qty" value={row.quantity} onChange={(e) => setRow(index, { quantity: e.target.value })} className="input" />
+                        <input type="number" min="0" step="0.01" placeholder="Unit cost" value={row.unitCost} onChange={(e) => setRow(index, { unitCost: e.target.value })} className="input" />
+                        <span className="text-right text-sm tabular-nums text-muted-foreground">{lineTotal ? formatKes(lineTotal) : '—'}</span>
+                        <button type="button" onClick={() => removeRow(index)} title="Remove" className="rounded-sm p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuX className="size-4" /></button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="mt-4 space-y-1 border-t pt-3 text-sm">
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="tabular-nums">{formatKes(liveTotals.subtotal)}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>Tax ({Number(form.taxRate) || 0}%)</span><span className="tabular-nums">{formatKes(liveTotals.taxAmount)}</span></div>
+                <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatKes(liveTotals.total)}</span></div>
+              </div>
+            </div>
+
+            <FieldGroup title="Notes">
+              <Field label="Notes" className="sm:col-span-2"><textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="input" /></Field>
+            </FieldGroup>
+
+            {formError && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{formError}</div>}
+
+            <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+              <button disabled={saving} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+                {saving && <LuLoaderCircle className="animate-spin" />}
+                {editing ? 'Save changes' : 'Create purchase'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setDetail(null) }}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold text-secondary">Purchase</p>
+                <h2 className="mt-1 font-display text-2xl font-semibold">{detail.purchaseNo}</h2>
+                <p className="mt-1 text-xs text-muted-foreground">{detail.supplier.name} · ordered {new Date(detail.orderDate).toLocaleDateString()}{detail.requisition && <> · from requisition {detail.requisition.requisitionNo}</>}</p>
+              </div>
+              <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', STATUS_META[detail.status].className)}>{STATUS_META[detail.status].label}</span>
+            </div>
+
+            <div className="mt-5 overflow-hidden rounded-sm border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr><th className="px-4 py-2">Product</th><th className="px-4 py-2 text-right">Qty</th><th className="px-4 py-2 text-right">Unit cost</th><th className="px-4 py-2 text-right">Line total</th></tr>
+                </thead>
+                <tbody>
+                  {detail.items.map((i) => (
+                    <tr key={i.id} className="border-t">
+                      <td className="px-4 py-2">{i.product.name}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{Number(i.quantity)} {i.product.unit}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.unitCost))}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.lineTotal))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 space-y-1 text-sm">
+              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span className="tabular-nums">{formatKes(Number(detail.subtotal))}</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>Tax ({Number(detail.taxRate)}%)</span><span className="tabular-nums">{formatKes(Number(detail.taxAmount))}</span></div>
+              <div className="flex justify-between font-semibold"><span>Total</span><span className="tabular-nums">{formatKes(Number(detail.total))}</span></div>
+            </div>
+
+            {detail.notes && <p className="mt-4 rounded-sm bg-muted/50 p-3 text-sm text-muted-foreground">{detail.notes}</p>}
+
+            <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
+              {detail.createdByEmployee && <>Created by {detail.createdByEmployee.firstName} {detail.createdByEmployee.lastName} on {new Date(detail.createdAt).toLocaleDateString()}</>}
+              {detail.orderedAt && <> · ordered {new Date(detail.orderedAt).toLocaleDateString()}</>}
+              {detail.receivedAt && <> · received {new Date(detail.receivedAt).toLocaleDateString()}</>}
+            </p>
+
+            <div className="mt-6 flex flex-wrap justify-end gap-2 border-t pt-5">
+              <button onClick={() => setPrinting(detail)} className="mr-auto inline-flex items-center gap-1.5 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted"><LuPrinter className="size-4" /> Print</button>
+              <button onClick={() => setDetail(null)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Close</button>
+              {detail.status === 'DRAFT' && <button onClick={() => { const d = detail; setDetail(null); openEdit(d) }} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Edit</button>}
+              {NEXT_ACTIONS[detail.status].map((a) => (
+                <button key={a.to} onClick={() => void changeStatus(detail, a.to)} disabled={working}
+                  className={cn('rounded-sm px-4 py-2.5 text-sm font-semibold disabled:opacity-60', a.to === 'CANCELLED' ? 'border text-destructive hover:bg-destructive/10' : 'bg-primary text-primary-foreground')}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {printing && (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-800/95 text-white"><LuLoaderCircle className="size-6 animate-spin" /></div>}>
+          <DocumentViewer kind="purchase" data={printing} profile={profile} onClose={() => setPrinting(null)} />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
+function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-6 border-t pt-5">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </div>
+  )
+}
+
+function Field({ label, required, className, children }: { label: string; required?: boolean; className?: string; children: ReactNode }) {
+  return (
+    <label className={cn('text-sm font-medium', className)}>
+      {label}
+      {required && <span className="text-destructive"> *</span>}
+      <span className="mt-1.5 block">{children}</span>
+    </label>
+  )
+}

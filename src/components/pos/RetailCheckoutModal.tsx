@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { LuCircleAlert, LuLoaderCircle, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
-import CustomerPicker, { type PickedCustomer } from './CustomerPicker'
+import { CustomerSelectField, type SaleParty } from './CustomerSelectModal'
 
 export type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 export type CreatedOrder = { id: string; orderNumber: number }
@@ -25,7 +25,7 @@ export default function RetailCheckoutModal({ items, total, channel, locationId,
   onComplete: (order: CreatedOrder) => void
 }) {
   const [mode, setMode] = useState<'PAY' | 'ROOM'>('PAY')
-  const [customer, setCustomer] = useState<PickedCustomer | null>(null)
+  const [party, setParty] = useState<SaleParty>({ kind: 'WALK_IN' })
   const [paymentMethodId, setPaymentMethodId] = useState(methods[0]?.id ?? '')
   const [reference, setReference] = useState('')
   const [amount, setAmount] = useState(String(total))
@@ -47,6 +47,17 @@ export default function RetailCheckoutModal({ items, total, channel, locationId,
     return () => window.clearTimeout(timer)
   }, [mode, staySearch])
 
+  // Picking a checked-in room as the customer means "bill this to that room"
+  // — flip straight to the ROOM tab with the stay already locked in.
+  useEffect(() => {
+    if (party.kind !== 'ROOM') return
+    setMode('ROOM')
+    setReservationId(party.reservationId)
+    setStays((current) => current.some((s) => s.id === party.reservationId)
+      ? current
+      : [...current, { id: party.reservationId, reservationNo: party.reservationNo, customer: party.customer, room: { number: party.roomNumber } }])
+  }, [party])
+
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (mode === 'PAY' && !paymentMethodId) return
@@ -61,7 +72,7 @@ export default function RetailCheckoutModal({ items, total, channel, locationId,
           channel,
           locationId,
           discount,
-          customerId: customer?.id,
+          customerId: party.kind === 'WALK_IN' ? undefined : party.customer.id,
           items: items.map((item) => channel === 'PRODUCTS' ? { productId: item.id, quantity: item.quantity } : { serviceId: item.id, quantity: item.quantity }),
         }),
       })
@@ -106,7 +117,7 @@ export default function RetailCheckoutModal({ items, total, channel, locationId,
         </div>
 
         <div className="mt-4">
-          <CustomerPicker customer={customer} onChange={setCustomer} />
+          <CustomerSelectField party={party} onChange={setParty} />
         </div>
 
         {mode === 'PAY' ? (

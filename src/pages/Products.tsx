@@ -48,7 +48,15 @@ type Product = {
   createdAt: string
 }
 type Summary = { total: number; active: number; inactive: number; lowStock: number }
-type Movement = { id: string; type: 'RECEIPT' | 'DISPATCH' | 'ADJUSTMENT' | 'TRANSFER'; location: { id: string; name: string }; quantity: string; note: string | null; occurredAt: string }
+type MovementType =
+  | 'OPENING_STOCK' | 'PURCHASE' | 'SALE' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'RETURN'
+  | 'DAMAGE_LOSS' | 'ADJUSTMENT' | 'BORROWED_IN' | 'RETURNED_BORROWED_STOCK' | 'LENT_OUT' | 'LOAN_RETURNED'
+const MOVEMENT_LABELS: Record<MovementType, string> = {
+  OPENING_STOCK: 'Opening stock', PURCHASE: 'Purchase', SALE: 'Sale', TRANSFER_IN: 'Transfer in',
+  TRANSFER_OUT: 'Transfer out', RETURN: 'Return', DAMAGE_LOSS: 'Damage / loss', ADJUSTMENT: 'Adjustment',
+  BORROWED_IN: 'Borrowed in', RETURNED_BORROWED_STOCK: 'Returned borrowed', LENT_OUT: 'Lent out', LOAN_RETURNED: 'Loan returned',
+}
+type Movement = { id: string; type: MovementType; location: { id: string; name: string }; quantity: string; note: string | null; occurredAt: string }
 
 type ProductForm = {
   categoryId: string
@@ -440,7 +448,7 @@ export default function Products() {
                 <div className="space-y-1.5">
                   {movements.slice(0, 5).map((m) => (
                     <div key={m.id} className="flex items-center justify-between rounded-sm bg-muted/50 px-3 py-2 text-xs">
-                      <span className="font-medium">{m.type === 'DISPATCH' ? 'Dispatch' : m.type === 'RECEIPT' ? 'Receipt' : m.type === 'TRANSFER' ? 'Transfer' : 'Adjustment'} · {m.location.name}{m.note ? ` — ${m.note}` : ''}</span>
+                      <span className="font-medium">{MOVEMENT_LABELS[m.type] ?? m.type} · {m.location.name}{m.note ? ` — ${m.note}` : ''}</span>
                       <span className={cn('font-semibold', Number(m.quantity) < 0 ? 'text-destructive' : 'text-success')}>{Number(m.quantity) > 0 ? '+' : ''}{Number(m.quantity).toLocaleString()}</span>
                     </div>
                   ))}

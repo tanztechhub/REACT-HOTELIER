@@ -161,6 +161,7 @@ export const navigation: NavGroup[] = [
       { label: 'Stock Ledger', href: '/inventory/stock-ledger', icon: LuBookOpen },
       { label: 'Goods Received', href: '/inventory/goods-received', icon: LuPackageCheck },
       { label: 'Suppliers', href: '/inventory/suppliers', icon: LuTruck },
+      { label: 'Purchase Requisitions', href: '/inventory/purchase-requisitions', icon: LuClipboardList },
       { label: 'Purchases', href: '/inventory/purchases', icon: LuShoppingBag },
       { label: 'Daily Expenses', href: '/inventory/daily-expenses', icon: LuReceipt },
     ],

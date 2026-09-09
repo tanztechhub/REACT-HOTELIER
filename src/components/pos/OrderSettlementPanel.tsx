@@ -7,7 +7,15 @@ import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from './OrderRec
 
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type CheckedInStay = { id: string; reservationNo: string; customer: { firstName: string; lastName: string | null }; room: { number: string } }
-type Order = ReceiptOrder & { notes: string | null; total: number; paid: number; customer: { firstName: string; lastName: string | null } | null }
+type Order = ReceiptOrder & {
+  notes: string | null
+  total: number
+  paid: number
+  customer: { firstName: string; lastName: string | null } | null
+  // Present when the tab was rung up "bill to Room X" — settlement then
+  // defaults to charging that folio (staff can still switch to cash).
+  reservation: CheckedInStay | null
+}
 
 const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
 
@@ -49,6 +57,11 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
       const response = await api<{ order: Order }>(`/pos/orders/${orderId}`)
       setOrder(response.order)
       setAmount(String(Math.max(0, response.order.total - response.order.paid)))
+      if (response.order.reservation) {
+        setMode('ROOM')
+        setReservationId(response.order.reservation.id)
+        setStays([response.order.reservation])
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load this order')
     } finally {
@@ -135,6 +148,11 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
           ) : (
             <>
               {order.customer && <p className="mt-4 text-sm"><span className="text-muted-foreground">Customer:</span> {order.customer.firstName} {order.customer.lastName ?? ''}</p>}
+              {order.reservation && (
+                <p className="mt-1 inline-flex items-center gap-1 rounded-sm bg-secondary/10 px-2 py-1 text-xs font-semibold text-secondary">
+                  Rung up to bill Room {order.reservation.room.number}
+                </p>
+              )}
 
               <div className="mt-3 space-y-2">
                 {order.items.map((item) => (
