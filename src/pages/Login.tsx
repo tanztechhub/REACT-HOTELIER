@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { FormEvent } from 'react'
+import type { CSSProperties, FormEvent } from 'react'
 import { useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { LuCircleAlert, LuIdCard, LuLoaderCircle, LuLock } from 'react-icons/lu'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
@@ -14,6 +14,22 @@ const businessTypeLabel: Record<string, string> = {
   MOTEL: 'Motel',
   CAFE: 'Cafe',
   RESTAURANT: 'Restaurant',
+}
+
+// "Tue, 26/09" — weekday + day/month, no year.
+function shortDateLabel(d = new Date()): string {
+  const weekday = d.toLocaleDateString('en-US', { weekday: 'short' })
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${weekday}, ${dd}/${mm}`
+}
+
+// The signature mesh — a faint 36px grid over the brand colour. Shared by
+// the desktop side panel and the mobile header.
+const MESH_STYLE: CSSProperties = {
+  backgroundImage:
+    'linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)',
+  backgroundSize: '36px 36px',
 }
 
 export default function Login() {
@@ -52,16 +68,39 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-svh">
+    <div className="flex min-h-svh flex-col lg:flex-row">
+      {/* Mobile identity header — the desktop side panel is hidden below lg,
+          so the mobile view gets its own branded band. */}
+      <div className="relative overflow-hidden bg-secondary px-6 pb-9 pt-7 text-white lg:hidden">
+        <div className="pointer-events-none absolute inset-0" style={MESH_STYLE} />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -right-12 -top-14 size-40 rounded-full border border-white/15" />
+          <div className="absolute -bottom-16 left-8 size-32 rounded-full border border-white/10" />
+        </div>
+
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <img
+              src={resolveLogoUrl(tenant.logoUrl) ?? '/PRIMARY.png'}
+              alt={tenant.shortName ?? 'Hotelier'}
+              className="size-9 shrink-0 rounded-sm bg-white/10 object-contain p-1"
+            />
+            <p className="font-display text-sm font-bold leading-tight text-white">
+              {tenant.shortName ?? 'HOTELIER'}
+            </p>
+          </div>
+          <p className="shrink-0 pt-1 text-xs font-semibold text-white/80">{shortDateLabel()}</p>
+        </div>
+
+        <h1 className="relative mt-7 font-display text-[26px] font-extrabold leading-[1.15]">
+          Welcome Back,
+          <br />
+          Login
+        </h1>
+      </div>
+
       <div className="relative hidden w-1/2 overflow-hidden bg-secondary lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              'linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px)',
-            backgroundSize: '36px 36px',
-          }}
-        />
+        <div className="pointer-events-none absolute inset-0" style={MESH_STYLE} />
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -left-16 -top-16 size-64 rounded-full border border-white/20" />
           <div className="absolute right-10 top-24 size-32 rounded-full border border-white/20" />
@@ -92,8 +131,10 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="flex w-full flex-1 items-center justify-center bg-background px-6 py-12 lg:w-1/2">
-        <div className="relative w-full max-w-sm ml-6 sm:ml-10">
+      <div className="flex w-full flex-1 items-center justify-center bg-background px-6 py-10 lg:w-1/2 lg:py-12">
+        {/* max-w-sm centred in the column; the orange accent overhangs a few
+            px on the left but is decorative and doesn't shift the card. */}
+        <div className="relative w-full max-w-sm">
           {/* Decorative node-line, sitting to the left of the card. */}
           <div className="pointer-events-none absolute -left-8 top-6 bottom-6 hidden sm:block" aria-hidden="true">
             <span className="absolute -left-[3px] -top-1.5 block size-3 rounded-full bg-secondary" />
