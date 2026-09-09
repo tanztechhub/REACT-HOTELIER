@@ -157,19 +157,18 @@ export function applyTheme(theme: TenantTheme): void {
     document.documentElement.style.setProperty(key, value)
   }
   applyFont(theme.font)
-  applyThemeColor(vars['--primary'])
+  applyThemeColor()
 }
 
-// Repaints the browser/OS chrome to the tenant's brand: the mobile browser
-// address bar, and — for an installed PWA in standalone mode — the window
-// title bar. Uses the derived dark brand shade (same colour the sidebar and
-// mobile top bar use) so it reads as app chrome, not a bright accent.
-function applyThemeColor(color: string): void {
+// Keeps the browser/OS chrome (installed-PWA title bar on desktop, mobile
+// browser address bar) a neutral white with dark text, rather than tinting
+// it per tenant. The in-app mobile top bar carries the brand colour instead.
+function applyThemeColor(): void {
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {
     meta = document.createElement('meta')
     meta.name = 'theme-color'
     document.head.appendChild(meta)
   }
-  meta.content = color
+  meta.content = '#ffffff'
 }

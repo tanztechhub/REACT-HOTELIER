@@ -31,7 +31,7 @@ export default function AppShell() {
           alt=""
           className="size-6 shrink-0 rounded-sm object-contain"
         />
-        <span className="font-display text-sm font-semibold tracking-tight">HOTELIER</span>
+        <span className="font-display text-sm font-extrabold tracking-tight">HOTELIER</span>
       </header>
 
       <div className="flex min-h-0 flex-1">

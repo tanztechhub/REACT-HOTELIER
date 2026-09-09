@@ -74,7 +74,7 @@ export default function Sidebar({ className, mobile = false, onNavigate }: Sideb
               transition={{ duration: 0.15 }}
               className="overflow-hidden whitespace-nowrap"
             >
-              <p className="font-display text-[15px] font-semibold leading-none tracking-tight text-white">
+              <p className="font-display text-[15px] font-extrabold leading-none tracking-tight text-white">
                 {shortName ?? 'HOTELIER'}
               </p>
               <p className="mt-1 text-[11px] leading-none text-sidebar-muted">
