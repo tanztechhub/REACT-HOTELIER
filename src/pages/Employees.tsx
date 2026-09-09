@@ -17,14 +17,13 @@ import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 
 const genders = ['MALE', 'FEMALE', 'OTHER'] as const
-const departments = ['RECEPTION', 'HOUSEKEEPING', 'KITCHEN', 'SALES', 'SERVICE_CENTER', 'INVENTORY', 'FINANCE', 'MANAGEMENT', 'MAINTENANCE', 'SECURITY'] as const
 const employmentTypes = ['FULL_TIME', 'PART_TIME', 'CASUAL', 'CONTRACT', 'INTERN'] as const
 const statuses = ['ACTIVE', 'ON_LEAVE', 'SUSPENDED', 'TERMINATED'] as const
 const salaryTypes = ['MONTHLY', 'DAILY', 'HOURLY'] as const
 const paymentMethods = ['BANK_TRANSFER', 'MPESA', 'CASH', 'CHEQUE'] as const
 
 type Gender = (typeof genders)[number]
-type Department = (typeof departments)[number]
+type DeptOption = { id: string; name: string; isActive: boolean }
 type EmploymentType = (typeof employmentTypes)[number]
 type Status = (typeof statuses)[number]
 type SalaryType = (typeof salaryTypes)[number]
@@ -41,7 +40,8 @@ type Employee = {
   alternativePhone: string | null
   email: string | null
   address: string | null
-  department: Department
+  departmentId: string
+  department: { id: string; name: string }
   jobTitle: string
   employmentType: EmploymentType
   status: Status
@@ -79,7 +79,7 @@ type EmployeeForm = {
   alternativePhone: string
   email: string
   address: string
-  department: Department | ''
+  departmentId: string
   jobTitle: string
   employmentType: EmploymentType
   status: Status
@@ -105,7 +105,7 @@ type EmployeeForm = {
 const emptyForm: EmployeeForm = {
   firstName: '', lastName: '', gender: '', dateOfBirth: '', nationalId: '',
   phone: '', alternativePhone: '', email: '', address: '',
-  department: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '', locationId: '',
+  departmentId: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '', locationId: '',
   salaryType: 'MONTHLY', salaryAmount: '', paymentMethod: 'BANK_TRANSFER', bankName: '', bankAccountNumber: '', mpesaNumber: '',
   kraPin: '', nssfNumber: '', shaNumber: '',
   employeeCode: '', pin: '',
@@ -132,6 +132,7 @@ export default function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [roles, setRoles] = useState<{ id: string; name: string }[]>([])
   const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
+  const [departmentOptions, setDepartmentOptions] = useState<DeptOption[]>([])
   const [summary, setSummary] = useState<Summary>({ total: 0, active: 0, onLeave: 0, suspended: 0, terminated: 0 })
   const [search, setSearch] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState('')
@@ -150,7 +151,7 @@ export default function Employees() {
     try {
       const query = new URLSearchParams()
       if (search.trim()) query.set('search', search.trim())
-      if (departmentFilter) query.set('department', departmentFilter)
+      if (departmentFilter) query.set('departmentId', departmentFilter)
       if (statusFilter) query.set('status', statusFilter)
       const response = await api<{ employees: Employee[]; summary: Summary }>(`/employees${query.size ? `?${query}` : ''}`)
       setEmployees(response.employees)
@@ -176,6 +177,9 @@ export default function Employees() {
     api<{ locations: { id: string; name: string }[] }>('/locations')
       .then((response) => setLocations(response.locations))
       .catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load locations'))
+    api<{ departments: DeptOption[] }>('/departments')
+      .then((response) => setDepartmentOptions(response.departments))
+      .catch((cause) => toast.error(cause instanceof Error ? cause.message : 'Could not load departments'))
   }, [toast])
 
   const initials = useMemo(() => (employee: Employee) => `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase(), [])
@@ -200,7 +204,7 @@ export default function Employees() {
       alternativePhone: employee.alternativePhone ?? '',
       email: employee.email ?? '',
       address: employee.address ?? '',
-      department: employee.department,
+      departmentId: employee.departmentId,
       jobTitle: employee.jobTitle,
       employmentType: employee.employmentType,
       status: employee.status,
@@ -322,7 +326,7 @@ export default function Employees() {
           </label>
           <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none">
             <option value="">All departments</option>
-            {departments.map((d) => <option key={d} value={d}>{titleCase(d)}</option>)}
+            {departmentOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none">
             <option value="">All statuses</option>
@@ -364,7 +368,7 @@ export default function Employees() {
                       </div>
                     </td>
                     <td className="px-5 py-4">
-                      <span className="rounded-sm bg-secondary/10 px-2.5 py-1 text-xs font-semibold text-secondary">{titleCase(employee.department)}</span>
+                      <span className="rounded-sm bg-secondary/10 px-2.5 py-1 text-xs font-semibold text-secondary">{employee.department.name}</span>
                       <p className="mt-1 text-xs text-muted-foreground">{employee.jobTitle}</p>
                     </td>
                     <td className="px-5 py-4 text-muted-foreground">{employee.phone}</td>
@@ -425,9 +429,9 @@ export default function Employees() {
 
             <FieldGroup title="Employment">
               <Field label="Department" required>
-                <select required value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value as Department })} className="input">
+                <select required value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} className="input">
                   <option value="" disabled>Select department</option>
-                  {departments.map((d) => <option key={d} value={d}>{titleCase(d)}</option>)}
+                  {departmentOptions.map((d) => <option key={d.id} value={d.id}>{d.name}{d.isActive ? '' : ' (inactive)'}</option>)}
                 </select>
               </Field>
               <Field label="Job Title" required><input required placeholder="e.g. Chef, Storekeeper" value={form.jobTitle} onChange={(e) => setForm({ ...form, jobTitle: e.target.value })} className="input" /></Field>

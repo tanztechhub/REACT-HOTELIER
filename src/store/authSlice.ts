@@ -10,7 +10,7 @@ export type AuthUser = {
   lastName: string
   employeeCode: string
   jobTitle: string
-  department: string
+  department: string | null
   role: AuthRole | null
   location: AuthLocation | null
 }

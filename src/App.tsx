@@ -16,6 +16,7 @@ import InventoryWorkspace from '@/pages/InventoryWorkspace'
 import Products from '@/pages/Products'
 import BusinessInformation from '@/pages/BusinessInformation'
 import Employees from '@/pages/Employees'
+import Departments from '@/pages/Departments'
 import RolesAndPermissions from '@/pages/RolesAndPermissions'
 import Categories from '@/pages/Categories'
 import Recipes from '@/pages/Recipes'
@@ -163,6 +164,7 @@ function App() {
         <Route path="/inventory/daily-expenses" element={<Expenses />} />
         <Route path="/housekeeping/lost-and-found" element={<LostAndFound />} />
         <Route path="/team/employees" element={<Employees />} />
+        <Route path="/team/departments" element={<Departments />} />
         <Route path="/team/roles-permissions" element={<RolesAndPermissions />} />
         {moduleRoutes.map((item) => (
           <Route key={item.href} path={item.href} element={<ModulePlaceholder />} />
