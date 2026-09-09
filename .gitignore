@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local env — real values live in the host (Cloudflare Pages) dashboard
+.env
+.env.local
