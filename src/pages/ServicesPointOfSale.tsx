@@ -5,6 +5,7 @@ import {
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useAppSelector } from '@/store/hooks'
+import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { cn } from '@/lib/utils'
 import RetailCheckoutModal, { type CreatedOrder, type PaymentMethod } from '@/components/pos/RetailCheckoutModal'
 
@@ -41,7 +42,6 @@ export default function ServicesPointOfSale() {
   const user = useAppSelector((s) => s.auth.user)
   const [services, setServices] = useState<PosService[]>([])
   const [locations, setLocations] = useState<RestaurantLocation[]>([])
-  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [profile, setProfile] = useState<BusinessProfile | null>(null)
   const [methods, setMethods] = useState<PaymentMethod[]>([])
   const [activeCategory, setActiveCategory] = useState('All items')
@@ -56,10 +56,7 @@ export default function ServicesPointOfSale() {
   const [confirmation, setConfirmation] = useState<CreatedOrder | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
 
-  const myLocations = user?.locations ?? []
-  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
-  const pickableLocations = myLocations.length > 1 ? myLocations : locations.filter((l) => l.isActive)
-  const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
+  const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId, needsChoice: needsLocationChoice } = useWorkingLocation(locations)
 
   async function loadServices() {
     const query = effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''
@@ -103,7 +100,6 @@ export default function ServicesPointOfSale() {
   const visibleItems = services.filter((s) => (activeCategory === 'All items' || s.category.name === activeCategory) && (!search.trim() || s.name.toLowerCase().includes(search.trim().toLowerCase())))
   const financials = useMemo(() => computeFinancials(cart, discount, profile), [cart, discount, profile])
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const needsLocationChoice = !fixedLocation && pickableLocations.length > 0 && !selectedLocationId
 
   function addItem(item: PosService) {
     setConfirmation(null)
@@ -144,7 +140,7 @@ export default function ServicesPointOfSale() {
               ) : pickableLocations.length > 0 ? (
                 <label className="flex items-center gap-1.5">
                   <LuMapPin className="size-3.5" />
-                  <select value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
+                  <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
                     <option value="">Select location…</option>
                     {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>

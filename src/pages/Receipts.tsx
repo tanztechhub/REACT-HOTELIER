@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuReceiptText, LuSearch, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import { useAppSelector } from '@/store/hooks'
+import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
 
 type ReceiptRow = ReceiptOrder & { total: number; paid: number }
@@ -12,23 +12,18 @@ const formatKes = (value: number | string) => `KES ${Number(value).toLocaleStrin
 
 export default function Receipts() {
   const toast = useToast()
-  const user = useAppSelector((s) => s.auth.user)
   const [orders, setOrders] = useState<ReceiptRow[]>([])
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [profile, setProfile] = useState<ReceiptProfile>(null)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<ReceiptRow | null>(null)
 
-  const myLocations = user?.locations ?? []
-  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
-  const pickableLocations = myLocations.length > 1 ? myLocations : locations
+  const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
   // Same convention as Tables.tsx: fixed-location staff only ever see their
   // own location's sales; a floating manager sees everything by default,
   // with an optional filter rather than a forced pick.
-  const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -74,7 +69,7 @@ export default function Receipts() {
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order # or table…" className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" />
         </label>
         {!fixedLocation && pickableLocations.length > 0 && (
-          <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
+          <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
             <option value="">All locations</option>
             {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>

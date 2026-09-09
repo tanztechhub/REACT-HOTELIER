@@ -13,6 +13,9 @@ export type AuthUser = {
   department: string | null
   role: AuthRole | null
   locations: AuthLocation[]
+  /** The POS's pre-selected location for this employee — one of `locations`
+   *  (or any active location for an unrestricted employee), or null. */
+  defaultLocation: AuthLocation | null
 }
 
 export type AuthState = {
@@ -72,6 +75,15 @@ export const restoreSession = createAsyncThunk('auth/restore', async (_: void, {
   }
 })
 
+/** Switch (or clear) the signed-in employee's default POS location. */
+export const setDefaultLocation = createAsyncThunk('auth/setDefaultLocation', async (locationId: string | null) => {
+  const response = await api<{ user: AuthUser }>('/auth/me/location', {
+    method: 'PATCH',
+    body: JSON.stringify({ locationId }),
+  })
+  return response.user
+})
+
 export const logout = createAsyncThunk('auth/logout', async () => {
   try {
     await api('/auth/logout', { method: 'POST' })
@@ -101,6 +113,10 @@ const authSlice = createSlice({
       .addCase(restoreSession.fulfilled, (state, action) => {
         state.user = action.payload.user
         state.expiresAt = action.payload.expiresAt
+        persistAuth(state)
+      })
+      .addCase(setDefaultLocation.fulfilled, (state, action) => {
+        state.user = action.payload
         persistAuth(state)
       })
       .addCase(restoreSession.rejected, (state) => {

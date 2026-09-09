@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuLoaderCircle, LuPencil, LuPlus, LuReceiptText, LuShoppingBag, LuTable2, LuTrash2, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import { useAppSelector } from '@/store/hooks'
+import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { cn } from '@/lib/utils'
 import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
@@ -36,10 +36,8 @@ type PanelTarget = { kind: 'table'; table: RestaurantTable; orderId: string | nu
 
 export default function Tables() {
   const toast = useToast()
-  const user = useAppSelector((s) => s.auth.user)
   const [tables, setTables] = useState<RestaurantTable[]>([])
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [takeaways, setTakeaways] = useState<TakeawaySummary[]>([])
   const [profile, setProfile] = useState<ReceiptProfile>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
@@ -53,14 +51,11 @@ export default function Tables() {
 
   const [panel, setPanel] = useState<PanelTarget | null>(null)
 
-  const myLocations = user?.locations ?? []
-  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
-  const pickableLocations = myLocations.length > 1 ? myLocations : locations
+  const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
   // Fixed-location staff always see only their own location; a floating
   // manager sees everything by default (browsing history/tables isn't a
   // live sale — forcing a pick would just be friction) with an optional
   // filter available instead.
-  const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -164,7 +159,7 @@ export default function Tables() {
         </div>
         <div className="flex items-center gap-2">
           {!fixedLocation && pickableLocations.length > 0 && (
-            <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
+            <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
               <option value="">All locations</option>
               {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>

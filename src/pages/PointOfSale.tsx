@@ -5,6 +5,7 @@ import {
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useAppSelector } from '@/store/hooks'
+import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { cn } from '@/lib/utils'
 import CustomerSelectModal, { partyLabel, type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
@@ -57,7 +58,6 @@ export default function PointOfSale() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [tables, setTables] = useState<RestaurantTable[]>([])
   const [locations, setLocations] = useState<Location[]>([])
-  const [selectedLocationId, setSelectedLocationId] = useState('')
   const [profile, setProfile] = useState<BusinessProfile | null>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [activeCategory, setActiveCategory] = useState('All items')
@@ -82,12 +82,7 @@ export default function PointOfSale() {
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
 
-  // Pinned to exactly one location → that's fixed. Pinned to several → the
-  // cashier picks from just those. Pinned to none → picks from all.
-  const myLocations = user?.locations ?? []
-  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
-  const pickableLocations = myLocations.length > 1 ? myLocations : locations.filter((l) => l.isActive)
-  const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
+  const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId, needsChoice: needsLocationChoice } = useWorkingLocation(locations)
 
   async function loadMenuItems() {
     const query = effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''
@@ -166,7 +161,6 @@ export default function PointOfSale() {
   const visibleItems = menuItems.filter((item) => (activeCategory === 'All items' || item.category.name === activeCategory) && (!search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())))
   const financials = useMemo(() => computeFinancials(cart, discount, profile), [cart, discount, profile])
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const needsLocationChoice = !fixedLocation && pickableLocations.length > 0 && !selectedLocationId
   const instantServe = locations.find((l) => l.id === effectiveLocationId)?.servesDirectly === true
 
   function addItem(item: MenuItem) {
@@ -270,7 +264,7 @@ export default function PointOfSale() {
             ) : pickableLocations.length > 0 ? (
               <label className="flex items-center gap-1.5">
                 <LuMapPin className="size-3.5" />
-                <select value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
+                <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
                   <option value="">Select location…</option>
                   {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
