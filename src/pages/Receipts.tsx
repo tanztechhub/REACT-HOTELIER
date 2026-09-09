@@ -22,7 +22,9 @@ export default function Receipts() {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<ReceiptRow | null>(null)
 
-  const fixedLocation = user?.location ?? null
+  const myLocations = user?.locations ?? []
+  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
+  const pickableLocations = myLocations.length > 1 ? myLocations : locations
   // Same convention as Tables.tsx: fixed-location staff only ever see their
   // own location's sales; a floating manager sees everything by default,
   // with an optional filter rather than a forced pick.
@@ -71,10 +73,10 @@ export default function Receipts() {
           <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order # or table…" className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" />
         </label>
-        {!fixedLocation && locations.length > 0 && (
+        {!fixedLocation && pickableLocations.length > 0 && (
           <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
             <option value="">All locations</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
         )}
       </div>

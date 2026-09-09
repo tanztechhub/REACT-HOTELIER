@@ -12,7 +12,7 @@ export type AuthUser = {
   jobTitle: string
   department: string | null
   role: AuthRole | null
-  location: AuthLocation | null
+  locations: AuthLocation[]
 }
 
 export type AuthState = {

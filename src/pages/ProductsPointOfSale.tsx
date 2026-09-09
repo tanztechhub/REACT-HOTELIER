@@ -58,7 +58,11 @@ export default function ProductsPointOfSale() {
   const [confirmation, setConfirmation] = useState<CreatedOrder | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
 
-  const fixedLocation = user?.location ?? null
+  // Pinned to exactly one location → fixed. Pinned to several → pick from
+  // just those. Pinned to none → pick from all.
+  const myLocations = user?.locations ?? []
+  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
+  const pickableLocations = myLocations.length > 1 ? myLocations : locations.filter((l) => l.isActive)
   const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
 
   async function loadProducts() {
@@ -103,7 +107,7 @@ export default function ProductsPointOfSale() {
   const visibleItems = products.filter((p) => (activeCategory === 'All items' || (p.category?.name ?? 'Uncategorized') === activeCategory) && (!search.trim() || p.name.toLowerCase().includes(search.trim().toLowerCase())))
   const financials = useMemo(() => computeFinancials(cart, discount, profile), [cart, discount, profile])
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const needsLocationChoice = !fixedLocation && locations.length > 0 && !selectedLocationId
+  const needsLocationChoice = !fixedLocation && pickableLocations.length > 0 && !selectedLocationId
 
   function addItem(item: PosProduct) {
     setConfirmation(null)
@@ -145,12 +149,12 @@ export default function ProductsPointOfSale() {
               <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
               {fixedLocation ? (
                 <span className="flex items-center gap-1.5"><LuMapPin className="size-3.5" /> {fixedLocation.name}</span>
-              ) : locations.length > 0 ? (
+              ) : pickableLocations.length > 0 ? (
                 <label className="flex items-center gap-1.5">
                   <LuMapPin className="size-3.5" />
                   <select value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
                     <option value="">Select location…</option>
-                    {locations.filter((l) => l.isActive).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                    {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
                 </label>
               ) : null}

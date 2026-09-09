@@ -53,7 +53,9 @@ export default function Tables() {
 
   const [panel, setPanel] = useState<PanelTarget | null>(null)
 
-  const fixedLocation = user?.location ?? null
+  const myLocations = user?.locations ?? []
+  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
+  const pickableLocations = myLocations.length > 1 ? myLocations : locations
   // Fixed-location staff always see only their own location; a floating
   // manager sees everything by default (browsing history/tables isn't a
   // live sale — forcing a pick would just be friction) with an optional
@@ -161,10 +163,10 @@ export default function Tables() {
           <p className="mt-2 text-sm text-muted-foreground">See who's seated, follow their order, and settle the bill.</p>
         </div>
         <div className="flex items-center gap-2">
-          {!fixedLocation && locations.length > 0 && (
+          {!fixedLocation && pickableLocations.length > 0 && (
             <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
               <option value="">All locations</option>
-              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           )}
           <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">

@@ -50,8 +50,7 @@ type Employee = {
   supervisor: { id: string; firstName: string; lastName: string } | null
   roleId: string | null
   role: { id: string; name: string } | null
-  locationId: string | null
-  location: { id: string; name: string } | null
+  locations: { id: string; name: string }[]
   salaryType: SalaryType
   salaryAmount: string
   paymentMethod: PaymentMethod
@@ -86,7 +85,7 @@ type EmployeeForm = {
   dateHired: string
   supervisorId: string
   roleId: string
-  locationId: string
+  locationIds: string[]
   salaryType: SalaryType
   salaryAmount: string
   paymentMethod: PaymentMethod
@@ -105,7 +104,7 @@ type EmployeeForm = {
 const emptyForm: EmployeeForm = {
   firstName: '', lastName: '', gender: '', dateOfBirth: '', nationalId: '',
   phone: '', alternativePhone: '', email: '', address: '',
-  departmentId: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '', locationId: '',
+  departmentId: '', jobTitle: '', employmentType: 'FULL_TIME', status: 'ACTIVE', dateHired: '', supervisorId: '', roleId: '', locationIds: [],
   salaryType: 'MONTHLY', salaryAmount: '', paymentMethod: 'BANK_TRANSFER', bankName: '', bankAccountNumber: '', mpesaNumber: '',
   kraPin: '', nssfNumber: '', shaNumber: '',
   employeeCode: '', pin: '',
@@ -184,6 +183,8 @@ export default function Employees() {
 
   const initials = useMemo(() => (employee: Employee) => `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase(), [])
   const supervisorOptions = useMemo(() => employees.filter((e) => e.id !== editing?.id), [employees, editing])
+  const toggleLocation = (id: string) =>
+    setForm((f) => ({ ...f, locationIds: f.locationIds.includes(id) ? f.locationIds.filter((x) => x !== id) : [...f.locationIds, id] }))
 
   function openCreate() {
     setEditing(null)
@@ -211,7 +212,7 @@ export default function Employees() {
       dateHired: employee.dateHired.slice(0, 10),
       supervisorId: employee.supervisorId ?? '',
       roleId: employee.roleId ?? '',
-      locationId: employee.locationId ?? '',
+      locationIds: employee.locations.map((l) => l.id),
       salaryType: employee.salaryType,
       salaryAmount: employee.salaryAmount,
       paymentMethod: employee.paymentMethod,
@@ -458,11 +459,28 @@ export default function Employees() {
                   {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </Field>
-              <Field label="Selling Location">
-                <select value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })} className="input">
-                  <option value="">Unassigned — can sell at any location</option>
-                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
+              <Field label="Working Locations" className="sm:col-span-2">
+                {locations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No locations set up — staff work anywhere by default.</p>
+                ) : (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {locations.map((l) => (
+                        <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-sm border bg-muted/40 px-3 py-2 text-sm">
+                          <input type="checkbox" checked={form.locationIds.includes(l.id)} onChange={() => toggleLocation(l.id)} className="size-4 accent-secondary" />
+                          {l.name}
+                        </label>
+                      ))}
+                    </div>
+                    <span className="mt-1.5 block text-xs text-muted-foreground">
+                      {form.locationIds.length === 0
+                        ? 'None selected — can work at any location (the POS asks which each time).'
+                        : form.locationIds.length === 1
+                          ? 'Pinned to one location — the POS uses it automatically.'
+                          : 'Pinned to several — the POS lets them pick one of these per sale.'}
+                    </span>
+                  </>
+                )}
               </Field>
             </FieldGroup>
 

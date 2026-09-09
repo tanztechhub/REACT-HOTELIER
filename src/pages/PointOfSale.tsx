@@ -82,7 +82,11 @@ export default function PointOfSale() {
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
 
-  const fixedLocation = user?.location ?? null
+  // Pinned to exactly one location → that's fixed. Pinned to several → the
+  // cashier picks from just those. Pinned to none → picks from all.
+  const myLocations = user?.locations ?? []
+  const fixedLocation = myLocations.length === 1 ? myLocations[0] : null
+  const pickableLocations = myLocations.length > 1 ? myLocations : locations.filter((l) => l.isActive)
   const effectiveLocationId = fixedLocation?.id ?? selectedLocationId
 
   async function loadMenuItems() {
@@ -162,7 +166,7 @@ export default function PointOfSale() {
   const visibleItems = menuItems.filter((item) => (activeCategory === 'All items' || item.category.name === activeCategory) && (!search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())))
   const financials = useMemo(() => computeFinancials(cart, discount, profile), [cart, discount, profile])
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const needsLocationChoice = !fixedLocation && locations.length > 0 && !selectedLocationId
+  const needsLocationChoice = !fixedLocation && pickableLocations.length > 0 && !selectedLocationId
   const instantServe = locations.find((l) => l.id === effectiveLocationId)?.servesDirectly === true
 
   function addItem(item: MenuItem) {
@@ -263,12 +267,12 @@ export default function PointOfSale() {
             <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
             {fixedLocation ? (
               <span className="flex items-center gap-1.5"><LuMapPin className="size-3.5" /> {fixedLocation.name}</span>
-            ) : locations.length > 0 ? (
+            ) : pickableLocations.length > 0 ? (
               <label className="flex items-center gap-1.5">
                 <LuMapPin className="size-3.5" />
                 <select value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
                   <option value="">Select location…</option>
-                  {locations.filter((l) => l.isActive).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </label>
             ) : null}
