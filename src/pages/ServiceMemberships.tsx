@@ -1,0 +1,717 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import {
+  LuBadgeCheck,
+  LuCalendarClock,
+  LuCircleDollarSign,
+  LuGrid2X2,
+  LuLoaderCircle,
+  LuPalette,
+  LuPencil,
+  LuPlus,
+  LuSearch,
+  LuSettings2,
+  LuTable2,
+  LuTrash2,
+  LuUsers,
+} from "react-icons/lu";
+import { api } from "@/lib/api";
+
+type Status = "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
+type Customer = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+};
+type Plan = {
+  id: string;
+  name: string;
+  price: string | number;
+  durationDays: number;
+  discountPercent: string | number;
+  isActive: boolean;
+};
+type Payment = {
+  id: string;
+  amount: string | number;
+  status: string;
+  reference: string | null;
+  paidAt: string | null;
+  paymentMethod: { name: string };
+};
+type Membership = {
+  id: string;
+  customerId: string;
+  planId: string;
+  startsAt: string;
+  endsAt: string;
+  status: Status;
+  customer: Customer;
+  plan: Plan;
+  payments: Payment[];
+  _count: { appointments: number };
+};
+type Summary = {
+  total: number;
+  active: number;
+  expiringSoon: number;
+  revenue: number;
+};
+type Form = {
+  customerId: string;
+  planId: string;
+  startsAt: string;
+  endsAt: string;
+  status: Status;
+};
+const blank: Form = {
+  customerId: "",
+  planId: "",
+  startsAt: "",
+  endsAt: "",
+  status: "ACTIVE",
+};
+const dateInput = (value: Date | string) =>
+  new Date(value).toISOString().slice(0, 10);
+const money = (value: number) =>
+  `KSh ${value.toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;
+type Theme = "royal" | "ocean" | "sunset";
+type View = "table" | "cards";
+const themes: Record<
+  Theme,
+  { hero: string; accent: string; soft: string; ring: string }
+> = {
+  royal: {
+    hero: "from-[#24104f] via-[#6d28d9] to-[#db2777]",
+    accent: "bg-purple-700",
+    soft: "bg-purple-100 text-purple-700",
+    ring: "ring-purple-500",
+  },
+  ocean: {
+    hero: "from-[#082f49] via-[#0369a1] to-[#0d9488]",
+    accent: "bg-sky-700",
+    soft: "bg-sky-100 text-sky-700",
+    ring: "ring-sky-500",
+  },
+  sunset: {
+    hero: "from-[#431407] via-[#c2410c] to-[#e11d48]",
+    accent: "bg-orange-700",
+    soft: "bg-orange-100 text-orange-700",
+    ring: "ring-orange-500",
+  },
+};
+
+export default function ServiceMemberships() {
+  const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [summary, setSummary] = useState<Summary>({
+    total: 0,
+    active: 0,
+    expiringSoon: 0,
+    revenue: 0,
+  });
+  const [form, setForm] = useState<Form>(blank);
+  const [editing, setEditing] = useState<Membership | null>(null);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [customizing, setCustomizing] = useState(false);
+  const [theme, setTheme] = useState<Theme>(
+    () => (localStorage.getItem("membership-theme") as Theme) || "royal",
+  );
+  const [view, setView] = useState<View>(
+    () => (localStorage.getItem("membership-view") as View) || "table",
+  );
+  const [compact, setCompact] = useState(
+    () => localStorage.getItem("membership-compact") === "true",
+  );
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [list, options] = await Promise.all([
+        api<{ memberships: Membership[]; summary: Summary }>(
+          "/service-center/memberships",
+        ),
+        api<{ customers: Customer[]; plans: Plan[] }>(
+          "/service-center/membership-options",
+        ),
+      ]);
+      setMemberships(list.memberships);
+      setSummary(list.summary);
+      setCustomers(options.customers);
+      setPlans(options.plans);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load memberships");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    localStorage.setItem("membership-theme", theme);
+  }, [theme]);
+  useEffect(() => {
+    localStorage.setItem("membership-view", view);
+  }, [view]);
+  useEffect(() => {
+    localStorage.setItem("membership-compact", String(compact));
+  }, [compact]);
+
+  const visible = useMemo(() => {
+    const term = query.toLowerCase().trim();
+    return memberships.filter((m) =>
+      `${m.customer.firstName} ${m.customer.lastName} ${m.plan.name} ${m.status}`
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [memberships, query]);
+  const selectedPlan = plans.find((p) => p.id === form.planId);
+
+  function create() {
+    const start = new Date();
+    setEditing(null);
+    setForm({
+      ...blank,
+      customerId: customers[0]?.id ?? "",
+      planId: plans.find((p) => p.isActive)?.id ?? "",
+      startsAt: dateInput(start),
+    });
+    setOpen(true);
+    setError("");
+  }
+  function edit(item: Membership) {
+    setEditing(item);
+    setForm({
+      customerId: item.customerId,
+      planId: item.planId,
+      startsAt: dateInput(item.startsAt),
+      endsAt: dateInput(item.endsAt),
+      status: item.status,
+    });
+    setOpen(true);
+    setError("");
+  }
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await api(
+        editing
+          ? `/service-center/memberships/${editing.id}`
+          : "/service-center/memberships",
+        {
+          method: editing ? "PATCH" : "POST",
+          body: JSON.stringify({
+            ...form,
+            startsAt: new Date(`${form.startsAt}T00:00:00`),
+            endsAt: form.endsAt
+              ? new Date(`${form.endsAt}T23:59:59`)
+              : undefined,
+          }),
+        },
+      );
+      setOpen(false);
+      setNotice(editing ? "Membership updated." : "Membership created.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save membership");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function remove(item: Membership) {
+    if (
+      !confirm(
+        `Delete ${item.customer.firstName} ${item.customer.lastName}'s ${item.plan.name} membership? Its payment records will also be removed.`,
+      )
+    )
+      return;
+    try {
+      await api(`/service-center/memberships/${item.id}`, { method: "DELETE" });
+      setNotice("Membership deleted.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete membership");
+    }
+  }
+  async function setStatus(item: Membership, status: Status) {
+    try {
+      await api(`/service-center/memberships/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update status");
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
+      <header
+        className={`relative overflow-hidden rounded-[2rem] bg-linear-to-br ${themes[theme].hero} p-7 text-white shadow-2xl`}
+      >
+        <div className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full border-[45px] border-white/10" />
+        <div className="pointer-events-none absolute bottom-0 right-1/3 h-32 w-32 translate-y-1/2 rounded-full bg-white/10 blur-2xl" />
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="relative">
+            <p className="text-xs font-bold uppercase tracking-[.2em] text-white/60">
+              Service centre
+            </p>
+            <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl">
+              Memberships built around every guest.
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-white/75">
+              Manage customer plans, validity, discounts, payments and connected
+              appointments.
+            </p>
+          </div>
+          <div className="relative flex flex-wrap gap-2">
+            <button
+              onClick={() => setCustomizing(!customizing)}
+              className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold backdrop-blur"
+            >
+              <LuPalette /> Customize
+            </button>
+            <button
+              onClick={create}
+              className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg"
+            >
+              <LuPlus /> New membership
+            </button>
+          </div>
+        </div>
+      </header>
+      {customizing && (
+        <section className="mt-4 flex flex-col gap-4 rounded-2xl border bg-card p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 font-semibold">
+              <LuSettings2 /> Personalize workspace
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Your choices are saved on this device.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex gap-2" aria-label="Color theme">
+              {(["royal", "ocean", "sunset"] as Theme[]).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setTheme(item)}
+                  aria-label={`${item} theme`}
+                  className={`h-8 w-8 rounded-full bg-linear-to-br ${themes[item].hero} ${theme === item ? `ring-2 ring-offset-2 ${themes[item].ring}` : ""}`}
+                />
+              ))}
+            </div>
+            <div className="flex rounded-xl bg-muted p-1">
+              <button
+                onClick={() => setView("table")}
+                className={`rounded-lg p-2 ${view === "table" ? "bg-card shadow" : "text-muted-foreground"}`}
+                aria-label="Table view"
+              >
+                <LuTable2 />
+              </button>
+              <button
+                onClick={() => setView("cards")}
+                className={`rounded-lg p-2 ${view === "cards" ? "bg-card shadow" : "text-muted-foreground"}`}
+                aria-label="Card view"
+              >
+                <LuGrid2X2 />
+              </button>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={compact}
+                onChange={(e) => setCompact(e.target.checked)}
+              />{" "}
+              Compact spacing
+            </label>
+          </div>
+        </section>
+      )}
+      {error && <Message error text={error} />}
+      {notice && <Message text={notice} />}
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric
+          icon={<LuUsers />}
+          label="All memberships"
+          value={summary.total}
+        />
+        <Metric icon={<LuBadgeCheck />} label="Active" value={summary.active} />
+        <Metric
+          icon={<LuCalendarClock />}
+          label="Expiring in 30 days"
+          value={summary.expiringSoon}
+        />
+        <Metric
+          icon={<LuCircleDollarSign />}
+          label="Paid revenue"
+          value={money(summary.revenue)}
+        />
+      </section>
+      <section className="mt-6 overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold">Customer memberships</h2>
+            <p className="text-xs text-muted-foreground">
+              Changes immediately flow into appointment eligibility and
+              discounts.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 rounded-xl border bg-background px-3">
+            <LuSearch className="text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search memberships"
+              className="h-10 bg-transparent text-sm outline-none"
+            />
+          </label>
+        </div>
+        {loading ? (
+          <div className="p-20 text-center">
+            <LuLoaderCircle className="mx-auto animate-spin" />
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="p-20 text-center text-sm text-muted-foreground">
+            No memberships found.
+          </div>
+        ) : view === "cards" ? (
+          <div
+            className={`grid gap-4 ${compact ? "p-3 sm:grid-cols-2 xl:grid-cols-3" : "p-5 sm:grid-cols-2 xl:grid-cols-3"}`}
+          >
+            {visible.map((m) => (
+              <article
+                key={m.id}
+                className="group relative overflow-hidden rounded-2xl border bg-background p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+              >
+                <div
+                  className={`absolute inset-x-0 top-0 h-1.5 ${themes[theme].accent}`}
+                />
+                <div className="flex items-start justify-between gap-3">
+                  <span
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl text-lg font-black ${themes[theme].soft}`}
+                  >
+                    {m.customer.firstName[0]}
+                    {m.customer.lastName[0]}
+                  </span>
+                  <select
+                    value={m.status}
+                    onChange={(e) =>
+                      void setStatus(m, e.target.value as Status)
+                    }
+                    className="rounded-full border bg-background px-2 py-1 text-[11px] font-bold"
+                  >
+                    {["ACTIVE", "PAUSED", "EXPIRED", "CANCELLED"].map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <h3 className="mt-4 text-lg font-bold">
+                  {m.customer.firstName} {m.customer.lastName}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  {m.customer.phone ?? m.customer.email ?? "No contact details"}
+                </p>
+                <div className={`mt-4 rounded-xl p-3 ${themes[theme].soft}`}>
+                  <p className="text-xs font-bold uppercase tracking-wide">
+                    {m.plan.name}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {m.plan.discountPercent}% savings · {m.plan.durationDays}{" "}
+                    days
+                  </p>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Valid until</span>
+                    <b className="mt-1 block">
+                      {new Date(m.endsAt).toLocaleDateString()}
+                    </b>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Activity</span>
+                    <b className="mt-1 block">
+                      {m._count.appointments} bookings
+                    </b>
+                  </div>
+                </div>
+                <div className="mt-5 flex items-center justify-between border-t pt-3">
+                  <b className="text-sm">
+                    {money(
+                      m.payments
+                        .filter((p) => p.status === "PAID")
+                        .reduce((sum, p) => sum + Number(p.amount), 0),
+                    )}{" "}
+                    paid
+                  </b>
+                  <div className="flex">
+                    <button
+                      onClick={() => edit(m)}
+                      aria-label="Edit membership"
+                      className="rounded-lg p-2 text-secondary hover:bg-muted"
+                    >
+                      <LuPencil />
+                    </button>
+                    <button
+                      onClick={() => void remove(m)}
+                      aria-label="Delete membership"
+                      className="rounded-lg p-2 text-destructive hover:bg-muted"
+                    >
+                      <LuTrash2 />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/60 text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3">Customer</th>
+                  <th className="px-5 py-3">Plan</th>
+                  <th className="px-5 py-3">Validity</th>
+                  <th className="px-5 py-3">Activity</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((m) => (
+                  <tr
+                    key={m.id}
+                    className="border-t transition-colors hover:bg-muted/30"
+                  >
+                    <td className={compact ? "px-5 py-2.5" : "px-5 py-4"}>
+                      <b>
+                        {m.customer.firstName} {m.customer.lastName}
+                      </b>
+                      <p className="text-xs text-muted-foreground">
+                        {m.customer.phone ??
+                          m.customer.email ??
+                          "No contact details"}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <b>{m.plan.name}</b>
+                      <p className="text-xs text-muted-foreground">
+                        {m.plan.discountPercent}% discount ·{" "}
+                        {money(Number(m.plan.price))}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-xs">
+                      <b>{new Date(m.startsAt).toLocaleDateString()}</b>
+                      <p className="text-muted-foreground">
+                        to {new Date(m.endsAt).toLocaleDateString()}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 text-xs">
+                      <b>{m._count.appointments} appointments</b>
+                      <p className="text-muted-foreground">
+                        {m.payments.length} payments ·{" "}
+                        {money(
+                          m.payments
+                            .filter((p) => p.status === "PAID")
+                            .reduce((sum, p) => sum + Number(p.amount), 0),
+                        )}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4">
+                      <select
+                        value={m.status}
+                        onChange={(e) =>
+                          void setStatus(m, e.target.value as Status)
+                        }
+                        className="rounded-lg border bg-background p-2 text-xs font-semibold"
+                      >
+                        {["ACTIVE", "PAUSED", "EXPIRED", "CANCELLED"].map(
+                          (s) => (
+                            <option key={s}>{s}</option>
+                          ),
+                        )}
+                      </select>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => edit(m)}
+                          aria-label="Edit membership"
+                          className="p-2 text-secondary"
+                        >
+                          <LuPencil />
+                        </button>
+                        <button
+                          onClick={() => void remove(m)}
+                          aria-label="Delete membership"
+                          className="p-2 text-destructive"
+                        >
+                          <LuTrash2 />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/60 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={save}
+            className="w-full max-w-xl rounded-3xl bg-card p-6 shadow-2xl"
+          >
+            <p className="text-sm font-semibold text-purple-700">
+              {editing ? "Edit membership" : "Enroll customer"}
+            </p>
+            <h2 className="mt-1 text-2xl font-semibold">Membership details</h2>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <Field label="Customer">
+                <select
+                  required
+                  className="input"
+                  value={form.customerId}
+                  onChange={(e) =>
+                    setForm({ ...form, customerId: e.target.value })
+                  }
+                >
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.firstName} {c.lastName}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Plan">
+                <select
+                  required
+                  className="input"
+                  value={form.planId}
+                  onChange={(e) =>
+                    setForm({ ...form, planId: e.target.value, endsAt: "" })
+                  }
+                >
+                  {plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {p.durationDays} days · {p.discountPercent}%
+                      off
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Start date">
+                <input
+                  required
+                  type="date"
+                  className="input"
+                  value={form.startsAt}
+                  onChange={(e) =>
+                    setForm({ ...form, startsAt: e.target.value })
+                  }
+                />
+              </Field>
+              <Field label="End date (optional)">
+                <input
+                  type="date"
+                  className="input"
+                  min={form.startsAt}
+                  value={form.endsAt}
+                  onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
+                />
+              </Field>
+              <Field label="Status">
+                <select
+                  className="input"
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({ ...form, status: e.target.value as Status })
+                  }
+                >
+                  {["ACTIVE", "PAUSED", "EXPIRED", "CANCELLED"].map((s) => (
+                    <option key={s}>{s}</option>
+                  ))}
+                </select>
+              </Field>
+              <div className="rounded-xl bg-purple-50 p-3 text-xs text-purple-900">
+                <b>{selectedPlan?.name ?? "Select a plan"}</b>
+                <p className="mt-1">
+                  {selectedPlan
+                    ? `${money(Number(selectedPlan.price))} · ${selectedPlan.durationDays} days · ${selectedPlan.discountPercent}% appointment discount`
+                    : "Plan benefits appear here."}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-xl border px-4 py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={saving}
+                className="flex items-center gap-2 rounded-xl bg-purple-800 px-4 py-2.5 font-bold text-white"
+              >
+                {saving && <LuLoaderCircle className="animate-spin" />}
+                {editing ? "Save changes" : "Create membership"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Metric({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+      <span className="inline-flex rounded-xl bg-purple-100 p-2.5 text-purple-700">
+        {icon}
+      </span>
+      <p className="mt-4 text-2xl font-bold">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="text-sm font-medium">
+      <span className="mb-1.5 block">{label}</span>
+      {children}
+    </label>
+  );
+}
+function Message({ text, error = false }: { text: string; error?: boolean }) {
+  return (
+    <div
+      className={`mt-4 rounded-xl border p-3 text-sm ${error ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}
+    >
+      {text}
+    </div>
+  );
+}
