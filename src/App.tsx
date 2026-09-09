@@ -14,7 +14,6 @@ import Rooms from '@/pages/Rooms'
 import Housekeeping from '@/pages/Housekeeping'
 import InventoryWorkspace from '@/pages/InventoryWorkspace'
 import Products from '@/pages/Products'
-import Users from '@/pages/Users'
 import BusinessInformation from '@/pages/BusinessInformation'
 import Employees from '@/pages/Employees'
 import RolesAndPermissions from '@/pages/RolesAndPermissions'
@@ -143,7 +142,6 @@ function App() {
         <Route path="/sales/tables" element={<Tables />} />
         <Route path="/sales/receipts" element={<Receipts />} />
         <Route path="/reports" element={<Reports />} />
-        <Route path="/users" element={<Users />} />
         <Route path="/business-information" element={<BusinessInformation />} />
         <Route path="/locations" element={<Locations />} />
         <Route path="/appearance" element={<ThemeCustomizer />} />
