@@ -157,18 +157,23 @@ export function applyTheme(theme: TenantTheme): void {
     document.documentElement.style.setProperty(key, value)
   }
   applyFont(theme.font)
-  applyThemeColor()
+  applyThemeColor(vars['--primary'])
 }
 
-// Keeps the browser/OS chrome (installed-PWA title bar on desktop, mobile
-// browser address bar) a neutral white with dark text, rather than tinting
-// it per tenant. The in-app mobile top bar carries the brand colour instead.
-function applyThemeColor(): void {
+// Matches the browser/OS chrome to what's on screen: on mobile a brand-
+// coloured top bar runs up behind the status bar, so the chrome takes the
+// tenant's dark brand shade; the desktop installed-app title bar stays a
+// neutral white.
+function applyThemeColor(brandColor: string): void {
   let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (!meta) {
     meta = document.createElement('meta')
     meta.name = 'theme-color'
     document.head.appendChild(meta)
   }
-  meta.content = '#ffffff'
+  // Below lg the app has a brand-coloured top bar that runs up behind the
+  // status bar, so the browser/OS chrome should match it. On desktop the
+  // installed-app title bar stays neutral white.
+  const mobile = window.matchMedia('(max-width: 1023px)').matches
+  meta.content = mobile ? brandColor : '#ffffff'
 }

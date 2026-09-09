@@ -70,8 +70,12 @@ export default function Login() {
   return (
     <div className="flex min-h-svh flex-col lg:flex-row">
       {/* Mobile identity header — the desktop side panel is hidden below lg,
-          so the mobile view gets its own branded band. */}
-      <div className="relative overflow-hidden bg-secondary px-6 pb-9 pt-7 text-white lg:hidden">
+          so the mobile view gets its own branded band. Fills the safe area
+          so the brand colour runs up behind the status bar. */}
+      <div
+        className="relative overflow-hidden bg-primary px-6 pb-9 text-white lg:hidden"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 1.75rem)' }}
+      >
         <div className="pointer-events-none absolute inset-0" style={MESH_STYLE} />
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -right-12 -top-14 size-40 rounded-full border border-white/15" />
@@ -93,9 +97,7 @@ export default function Login() {
         </div>
 
         <h1 className="relative mt-7 font-display text-[26px] font-extrabold leading-[1.15]">
-          Welcome Back,
-          <br />
-          Login
+          Welcome back.
         </h1>
       </div>
 

@@ -16,8 +16,12 @@ export default function AppShell() {
       <LicenseBanner />
 
       {/* Mobile top bar — the sidebar is hidden below `lg`; the hamburger
-          opens it as a drawer. */}
-      <header className="flex items-center gap-3 border-b border-sidebar-border bg-primary px-3 py-2 text-primary-foreground lg:hidden">
+          opens it as a drawer. Fills the safe area so the brand colour runs
+          up behind the status bar. */}
+      <header
+        className="flex items-center gap-3 border-b border-sidebar-border bg-primary px-3 pb-2 text-primary-foreground lg:hidden"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.5rem)' }}
+      >
         <button
           type="button"
           onClick={() => setMobileNav(true)}
