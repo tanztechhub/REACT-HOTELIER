@@ -12,7 +12,10 @@ export type TenantBranding = {
 // different DOM surface and is also consumed directly by components as data
 // (logo <img src>, name text), not only applied imperatively.
 export function applyBranding(branding: TenantBranding): void {
-  document.title = branding.shortName ?? 'HOTELIER'
+  // Always just "HOTELIER" — the client's own name is shown inside the app
+  // (sidebar brand, business info), not in the window/tab title or the
+  // installed-app title bar.
+  document.title = 'HOTELIER'
 
   const absoluteLogoUrl = resolveLogoUrl(branding.logoUrl)
   if (!absoluteLogoUrl) return // no custom logo — leave index.html's static defaults alone

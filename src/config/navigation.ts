@@ -210,3 +210,23 @@ export const navigation: NavGroup[] = [
 export function sectionForPath(pathname: string): PermissionSection | undefined {
   return navigation.find((group) => group.items.some((item) => item.href === pathname))?.section
 }
+
+// Hrefs that are a route-segment prefix of another nav item's href — e.g.
+// "/housekeeping" is a prefix of "/housekeeping/room-management". Those must
+// match EXACTLY (NavLink `end`), otherwise being on the child route lights
+// up the parent item too and two tabs show active at once. Non-prefix items
+// stay non-exact so their own detail routes (e.g. /sales/receipts/:id) keep
+// the tab highlighted.
+const parentHrefs: ReadonlySet<string> = (() => {
+  const all = navigation.flatMap((group) => group.items.map((item) => item.href))
+  const parents = new Set<string>()
+  for (const href of all) {
+    const prefix = href.endsWith('/') ? href : `${href}/`
+    if (all.some((other) => other !== href && other.startsWith(prefix))) parents.add(href)
+  }
+  return parents
+})()
+
+export function navItemMatchesExactly(href: string): boolean {
+  return href === '/' || parentHrefs.has(href)
+}

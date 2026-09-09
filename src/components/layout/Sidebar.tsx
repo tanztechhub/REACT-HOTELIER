@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LuChevronLeft, LuChevronRight, LuLogOut } from 'react-icons/lu'
+import { LuChevronLeft, LuChevronRight, LuLogOut, LuX } from 'react-icons/lu'
 import { IoPersonCircleSharp } from 'react-icons/io5'
-import { navigation, type PermissionSection } from '@/config/navigation'
+import { navigation, navItemMatchesExactly, type PermissionSection } from '@/config/navigation'
 import { cn } from '@/lib/utils'
 import { useAppDispatch, useAppSelector } from '@/store/hooks'
 import { logout } from '@/store/authSlice'
@@ -13,8 +13,17 @@ const EXPANDED_WIDTH = 264
 const COLLAPSED_WIDTH = 80
 const DEFAULT_SECTIONS: PermissionSection[] = ['OVERVIEW']
 
-export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+type SidebarProps = {
+  className?: string
+  /** Rendered as a slide-in drawer (mobile) — never collapsible, shows a
+   *  close button, and closes itself on navigation. */
+  mobile?: boolean
+  onNavigate?: () => void
+}
+
+export default function Sidebar({ className, mobile = false, onNavigate }: SidebarProps) {
+  const [collapsedState, setCollapsed] = useState(false)
+  const collapsed = mobile ? false : collapsedState
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const user = useAppSelector((s) => s.auth.user)
@@ -25,6 +34,7 @@ export default function Sidebar() {
 
   function handleLogout() {
     void dispatch(logout())
+    onNavigate?.()
     navigate('/login', { replace: true })
   }
 
@@ -32,16 +42,21 @@ export default function Sidebar() {
     <motion.aside
       animate={{ width: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH }}
       transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-      className="relative z-20 flex h-svh flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+      className={cn(
+        'relative z-20 flex h-svh flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
+        className,
+      )}
     >
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        className="absolute -right-3.5 top-8 z-30 flex size-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition-colors hover:text-foreground"
-      >
-        {collapsed ? <LuChevronRight className="size-4" /> : <LuChevronLeft className="size-4" />}
-      </button>
+      {!mobile && (
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="absolute -right-3.5 top-8 z-30 flex size-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition-colors hover:text-foreground"
+        >
+          {collapsed ? <LuChevronRight className="size-4" /> : <LuChevronLeft className="size-4" />}
+        </button>
+      )}
       {/* Brand */}
       <div
         className={cn(
@@ -68,6 +83,16 @@ export default function Sidebar() {
             </motion.div>
           )}
         </AnimatePresence>
+        {mobile && (
+          <button
+            type="button"
+            onClick={onNavigate}
+            aria-label="Close menu"
+            className="ml-auto shrink-0 rounded-sm p-1.5 text-sidebar-muted transition-colors hover:bg-sidebar-accent hover:text-white"
+          >
+            <LuX className="size-5" />
+          </button>
+        )}
       </div>
 
       {/* Nav */}
@@ -99,7 +124,8 @@ export default function Sidebar() {
                 <li key={item.href} className="relative">
                   <NavLink
                     to={item.href}
-                    end={item.href === '/'}
+                    end={navItemMatchesExactly(item.href)}
+                    onClick={mobile ? onNavigate : undefined}
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(
