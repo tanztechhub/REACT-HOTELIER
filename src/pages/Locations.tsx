@@ -1,6 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuMapPin, LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu'
+import type { IconType } from 'react-icons'
+import {
+  LuBedDouble,
+  LuCircleAlert,
+  LuConciergeBell,
+  LuLoaderCircle,
+  LuPackage,
+  LuPencil,
+  LuPlus,
+  LuPower,
+  LuStore,
+  LuTrash2,
+  LuUtensils,
+} from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
@@ -17,6 +30,15 @@ const SELLING_PERMISSIONS = [
   { key: 'canSellServices', label: 'Can Sell Services', description: 'Spa, gym, and other services' },
   { key: 'canSellProducts', label: 'Can Sell Products', description: 'Retail store items' },
 ] as const
+
+// Compact per-row indicators for the four selling permissions — green when
+// the location may sell that line, faint when it can't.
+const PERMISSION_ICONS: { key: 'canSellRooms' | 'canSellMenu' | 'canSellServices' | 'canSellProducts'; icon: IconType; label: string }[] = [
+  { key: 'canSellRooms', icon: LuBedDouble, label: 'Rooms' },
+  { key: 'canSellMenu', icon: LuUtensils, label: 'Menu' },
+  { key: 'canSellServices', icon: LuConciergeBell, label: 'Services' },
+  { key: 'canSellProducts', icon: LuPackage, label: 'Products' },
+]
 
 type Employee = { id: string; firstName: string; lastName: string }
 type LocationRow = {
@@ -155,20 +177,24 @@ export default function Locations() {
     }
   }
 
+  async function toggleActive(location: LocationRow) {
+    try {
+      await api(`/locations/${location.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !location.isActive }) })
+      toast.success(location.isActive ? 'Location deactivated.' : 'Location activated.')
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not update location')
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-secondary">System</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold">Locations</h1>
-          <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Physical selling points across the property. Menu items and staff can optionally be scoped to one, so the POS only ever shows what's actually sellable there.
-          </p>
-        </div>
-        <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
-          <LuPlus /> Add location
-        </button>
-      </header>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-secondary">
+          {locations.length} · System
+        </p>
+        <h1 className="mt-1 font-display text-3xl font-semibold">Locations</h1>
+      </div>
 
       {error && (
         <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
@@ -177,34 +203,108 @@ export default function Locations() {
         </div>
       )}
 
-      {loading ? (
-        <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading locations…</div>
-      ) : locations.length === 0 ? (
-        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No locations yet. If you never add one, everything behaves as a single point of sale.</div>
-      ) : (
-        <section className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {locations.map((location) => (
-            <article key={location.id} className="rounded-sm border bg-card p-5 shadow-sm">
-              <div className="flex items-start justify-between">
-                <span className="flex size-9 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuMapPin className="size-4" /></span>
-                <span className={cn('rounded-sm px-2.5 py-1 text-xs font-semibold', location.isActive ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground')}>{location.isActive ? 'Active' : 'Inactive'}</span>
-              </div>
-              <h2 className="mt-4 font-semibold">{location.name}</h2>
-              <p className="mt-1 text-xs text-muted-foreground">{[location.type ? typeLabels[location.type] : null, location.address].filter(Boolean).join(' · ') || 'No details set'}</p>
-              {location.manager && <p className="mt-1 text-xs text-muted-foreground">Manager: {location.manager.firstName} {location.manager.lastName}</p>}
-              {(location.openingTime || location.closingTime) && <p className="mt-1 text-xs text-muted-foreground">Hours: {location.openingTime ?? '—'} – {location.closingTime ?? '—'}</p>}
-              <div className="mt-3 flex gap-3 text-xs text-muted-foreground">
-                <span>{location._count.menuItems} menu item{location._count.menuItems === 1 ? '' : 's'}</span>
-                <span>{location._count.employees} staff</span>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <button onClick={() => openEdit(location)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Edit</button>
-                <button onClick={() => void deleteLocation(location)} className="inline-flex items-center gap-1.5 rounded-sm border border-destructive/30 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10"><LuTrash2 className="size-3.5" /> Delete</button>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
+      <section className="mt-6 overflow-hidden rounded-lg border bg-card shadow-sm">
+        <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-secondary">Locations</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">Branches &amp; warehouses</h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+              Every selling point, warehouse, and internal store this property runs. Menu items and staff can be scoped to one, so the POS only ever shows what's sellable there.
+            </p>
+          </div>
+          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+            <LuPlus /> New location
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-64 items-center justify-center gap-2 p-8 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading locations…</div>
+        ) : locations.length === 0 ? (
+          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">No locations yet. If you never add one, everything behaves as a single point of sale.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[880px] text-left text-sm">
+              <thead className="bg-primary text-primary-foreground">
+                <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide">
+                  <th className="w-14" aria-label="Icon" />
+                  <th>Location</th>
+                  <th>Type</th>
+                  <th>Manager</th>
+                  <th>Phone</th>
+                  <th>Permissions</th>
+                  <th>Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="[&>tr]:border-b [&>tr:last-child]:border-0">
+                {locations.map((location) => (
+                  <tr key={location.id} className="align-middle transition hover:bg-muted/40">
+                    <td className="px-4 py-3">
+                      <span className="flex size-9 items-center justify-center rounded-md border bg-secondary/10 text-secondary">
+                        <LuStore className="size-4" />
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold">{location.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {location.address || location.description || (location.type ? typeLabels[location.type] : '—')}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {location.type ? (
+                        <span className="inline-flex whitespace-nowrap rounded-full border border-secondary/40 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-secondary">
+                          {typeLabels[location.type]}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      {location.manager ? `${location.manager.firstName} ${location.manager.lastName}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                      {[location.primaryPhone, location.secondaryPhone].filter(Boolean).join(' / ') || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {PERMISSION_ICONS.map(({ key, icon: Icon, label }) => (
+                          <span
+                            key={key}
+                            title={`${label}: ${location[key] ? 'allowed' : 'off'}`}
+                            className={cn(
+                              'flex size-7 items-center justify-center rounded-md border',
+                              location[key]
+                                ? 'border-success/30 bg-success/10 text-success'
+                                : 'border-transparent bg-muted text-muted-foreground/40',
+                            )}
+                          >
+                            <Icon className="size-3.5" />
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn(
+                        'inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide',
+                        location.isActive ? 'border-success/40 text-success' : 'border-muted-foreground/30 text-muted-foreground',
+                      )}>
+                        {location.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(location)} title="Edit" className="rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-4" /></button>
+                        <button onClick={() => void toggleActive(location)} title={location.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-2 hover:bg-muted', location.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-4" /></button>
+                        <button onClick={() => void deleteLocation(location)} title="Delete" className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false) }}>
