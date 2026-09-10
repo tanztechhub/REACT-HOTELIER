@@ -2,26 +2,30 @@ import ReceiptPrinterEncoder from '@point-of-sale/receipt-printer-encoder'
 import type { ReceiptOrder, ReceiptProfile } from '@/components/pos/OrderReceipt'
 
 /**
- * Direct ESC/POS thermal printing from the browser.
+ * Direct ESC/POS thermal printing from the browser. Four transports:
  *
- * A PWA can't reach a printer that Windows installed with its own driver
- * (that's what an Electron app talks to) — the OS driver holds the device.
- * What it CAN do: talk to a USB or Bluetooth thermal printer directly over
- * WebUSB / Web Bluetooth (Chrome/Edge, one-time permission). When that isn't
- * set up, we fall back to the browser print dialog with an 80mm page.
+ *  - 'usb'       WebUSB, direct to a driverless / WinUSB printer (no dialog)
+ *  - 'bluetooth' Web Bluetooth, direct to a BLE printer (no dialog)
+ *  - 'bridge'    the local HOTELIER print bridge on 127.0.0.1 — spools RAW to
+ *                any OS-installed printer BY NAME, incl. old USB thermals
+ *                behind a vendor driver (the case WebUSB can't reach)
+ *  - 'dialog'    the browser print sheet, 80mm page — works with anything
  */
 
 const KEY = 'hotelier.thermal'
+const DEFAULT_BRIDGE_URL = 'http://127.0.0.1:47011'
 
-export type ThermalConnection = 'usb' | 'bluetooth' | 'dialog'
+export type ThermalConnection = 'usb' | 'bluetooth' | 'bridge' | 'dialog'
 
 export type ThermalSettings = {
   enabled: boolean
   connection: ThermalConnection
   /** encoder printerModel preset, or 'generic' */
   model: string
-  /** informational label / the name Windows shows (not used to route USB) */
+  /** the paired USB/BT device label, or — for 'bridge' — the OS printer name */
   address: string
+  /** where the local print bridge listens */
+  bridgeUrl: string
   /** characters per line */
   columns: number
   autoPrint: boolean
@@ -39,9 +43,10 @@ export const PRINTER_MODELS: { value: string; label: string }[] = [
 
 const DEFAULTS: ThermalSettings = {
   enabled: true,
-  connection: 'usb',
+  connection: 'bridge',
   model: 'generic',
   address: '',
+  bridgeUrl: DEFAULT_BRIDGE_URL,
   columns: 48,
   autoPrint: true,
 }
@@ -134,6 +139,58 @@ async function sendBluetooth(bytes: Uint8Array): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------- local bridge
+
+export type BridgePrinter = { name: string; default: boolean; status?: string }
+
+function bridgeBase(url?: string): string {
+  return (url || getThermalSettings().bridgeUrl || DEFAULT_BRIDGE_URL).replace(/\/$/, '')
+}
+
+/** Is the local print bridge reachable? Returns its version/host, or null. */
+export async function pingBridge(url?: string): Promise<{ version: string; host: string } | null> {
+  try {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 2500)
+    const r = await fetch(`${bridgeBase(url)}/status`, { signal: controller.signal })
+    clearTimeout(t)
+    if (!r.ok) return null
+    const body = (await r.json()) as { app?: string; version?: string; host?: string }
+    if (body.app !== 'hotelier-print-bridge') return null
+    return { version: body.version ?? '?', host: body.host ?? '?' }
+  } catch {
+    return null
+  }
+}
+
+export async function listBridgePrinters(url?: string): Promise<{ default: string | null; printers: BridgePrinter[] }> {
+  const r = await fetch(`${bridgeBase(url)}/printers`)
+  const body = (await r.json()) as { ok?: boolean; error?: string; default?: string | null; printers?: BridgePrinter[] }
+  if (!r.ok || !body.ok) throw new Error(body.error ?? 'The print bridge could not list printers.')
+  return { default: body.default ?? null, printers: body.printers ?? [] }
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(s)
+}
+
+async function sendBridge(bytes: Uint8Array, s: ThermalSettings): Promise<void> {
+  let r: Response
+  try {
+    r = await fetch(`${bridgeBase(s.bridgeUrl)}/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ printer: s.address || undefined, data: toBase64(bytes) }),
+    })
+  } catch {
+    throw new Error('The local print bridge isn’t running. Start it, or switch Connection type in Settings.')
+  }
+  const body = (await r.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+  if (!r.ok || !body.ok) throw new Error(body.error ?? 'The print bridge could not print.')
+}
+
 // ---------------------------------------------------------------- receipt bytes
 
 const money = (v: number | string) => `KES ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -223,7 +280,8 @@ export async function printReceipt(order?: ReceiptOrder | null, profile?: Receip
   }
 
   const bytes = buildReceiptBytes(order, profile ?? null, s)
-  if (s.connection === 'bluetooth') await sendBluetooth(bytes)
+  if (s.connection === 'bridge') await sendBridge(bytes, s)
+  else if (s.connection === 'bluetooth') await sendBluetooth(bytes)
   else await sendUsb(bytes)
   return { method: 'thermal' }
 }

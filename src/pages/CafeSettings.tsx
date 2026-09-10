@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { LuLoaderCircle, LuPrinter, LuShieldCheck } from 'react-icons/lu'
 import { api } from '@/lib/api'
@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils'
 import {
   getThermalSettings, saveThermalSettings, pairUsbPrinter, pairBluetoothPrinter,
   webUsbAvailable, webBluetoothAvailable, PRINTER_MODELS,
-  type ThermalSettings, type ThermalConnection,
+  pingBridge, listBridgePrinters,
+  type ThermalSettings, type ThermalConnection, type BridgePrinter,
 } from '@/lib/thermalPrinter'
 
 type LicenseStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED'
@@ -113,6 +114,7 @@ function Tile({ label, value, mono, children }: { label: string; value?: string;
 }
 
 const CONNECTIONS: { value: ThermalConnection; label: string }[] = [
+  { value: 'bridge', label: 'Local print bridge (any OS printer)' },
   { value: 'usb', label: 'USB (WebUSB, direct)' },
   { value: 'bluetooth', label: 'Bluetooth (direct)' },
   { value: 'dialog', label: 'Browser print dialog' },
@@ -126,10 +128,34 @@ function ReceiptPrinter() {
   const toast = useToast()
   const [s, setS] = useState<ThermalSettings>(getThermalSettings)
   const [pairing, setPairing] = useState(false)
+  const [bridge, setBridge] = useState<{ checking: boolean; up: null | { version: string; host: string }; printers: BridgePrinter[]; error: string }>(
+    { checking: false, up: null, printers: [], error: '' },
+  )
 
   function patch(next: Partial<ThermalSettings>) {
     setS(saveThermalSettings(next))
   }
+
+  const checkBridge = useCallback(async (url?: string) => {
+    setBridge((b) => ({ ...b, checking: true, error: '' }))
+    const up = await pingBridge(url)
+    if (!up) {
+      setBridge({ checking: false, up: null, printers: [], error: '' })
+      return
+    }
+    try {
+      const list = await listBridgePrinters(url)
+      setBridge({ checking: false, up, printers: list.printers, error: '' })
+      setS((cur) => (cur.address ? cur : saveThermalSettings({ address: list.default ?? cur.address })))
+    } catch (cause) {
+      setBridge({ checking: false, up, printers: [], error: cause instanceof Error ? cause.message : 'Could not list printers' })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (s.enabled && s.connection === 'bridge') void checkBridge(s.bridgeUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s.enabled, s.connection, s.bridgeUrl])
 
   async function connect() {
     setPairing(true)
@@ -186,6 +212,46 @@ function ReceiptPrinter() {
             </div>
           </div>
 
+          {s.connection === 'bridge' && (
+            <>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <span className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold',
+                  bridge.up ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive',
+                )}>
+                  <span className={cn('size-1.5 rounded-full', bridge.up ? 'bg-success' : 'bg-destructive')} />
+                  {bridge.checking ? 'Checking…' : bridge.up ? `Bridge running · v${bridge.up.version} · ${bridge.up.host}` : 'Bridge not detected'}
+                </span>
+                <button type="button" onClick={() => void checkBridge(s.bridgeUrl)} className="rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">Recheck</button>
+              </div>
+
+              {bridge.up ? (
+                <>
+                  <Label>Printer</Label>
+                  <select value={s.address} onChange={(e) => patch({ address: e.target.value })} className="input mt-2">
+                    {bridge.printers.length === 0 && <option value="">No printers found</option>}
+                    {bridge.printers.map((p) => (
+                      <option key={p.name} value={p.name}>{p.name}{p.default ? ' (default)' : ''}</option>
+                    ))}
+                  </select>
+                  {bridge.error && <p className="mt-2 text-xs font-medium text-warning">{bridge.error}</p>}
+                </>
+              ) : (
+                <p className="mt-2 max-w-xl text-xs text-muted-foreground">
+                  Install the <span className="font-semibold text-foreground">HOTELIER print bridge</span> on this machine once, then click Recheck. It’s a tiny background app that lets the browser print to any printer Windows knows — including an old USB thermal printer behind its own driver.
+                </p>
+              )}
+
+              <Label>Bridge address</Label>
+              <input
+                value={s.bridgeUrl}
+                onChange={(e) => patch({ bridgeUrl: e.target.value })}
+                placeholder="http://127.0.0.1:47011"
+                className="input mt-2 max-w-xs"
+              />
+            </>
+          )}
+
           {direct && (
             <>
               <Label>Connected printer</Label>
@@ -228,7 +294,7 @@ function ReceiptPrinter() {
           </label>
 
           <p className="mt-4 max-w-xl text-xs text-muted-foreground">
-            A browser can’t reach a printer that Windows installed with its own driver — WebUSB needs a driverless / WinUSB printer, or a Bluetooth one. If neither fits, “Browser print dialog” prints to any OS printer (with a dialog).
+            <span className="font-semibold text-foreground">Local print bridge</span> is the reliable choice for old USB thermal printers behind a Windows driver. <span className="font-semibold text-foreground">USB / Bluetooth</span> talk to the printer directly (no helper) but need a driverless / WinUSB or a BLE printer. <span className="font-semibold text-foreground">Browser print dialog</span> works with anything but shows a dialog.
           </p>
         </>
       )}
