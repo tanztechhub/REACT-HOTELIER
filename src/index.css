@@ -239,7 +239,7 @@
     width: 100%;
     border-radius: var(--radius-sm);
     border: 1px solid var(--color-border);
-    background: var(--color-card);
+    background: transparent;
     padding: 0.625rem 0.75rem;
     font-size: 0.875rem;
     font-weight: 600;
@@ -250,6 +250,16 @@
   .input:focus {
     box-shadow: 0 0 0 2px var(--color-ring);
   }
+}
+
+/* Text-entry controls have no fill of their own — the border alone delineates
+   the field. Unlayered so it also overrides inline bg-* utilities (bg-card,
+   bg-background, bg-muted) on the ~50 controls styled that way. Buttons and
+   toggle/range/file/colour inputs keep their own painting. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="image"]):not([type="submit"]):not([type="reset"]):not([type="button"]),
+select,
+textarea {
+  background-color: transparent;
 }
 
 @layer utilities {
