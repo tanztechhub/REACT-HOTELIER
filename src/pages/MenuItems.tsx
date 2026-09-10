@@ -64,10 +64,10 @@ type Variant = {
 
 const TAX_CHOICES = [
   { key: 'INHERIT', label: 'Business default' },
-  { key: 'STANDARD_INCLUSIVE', label: 'Standard — price already includes tax' },
-  { key: 'STANDARD_EXCLUSIVE', label: 'Standard — tax added on top' },
-  { key: 'ZERO_RATED', label: 'Zero-rated (taxable at 0%)' },
-  { key: 'EXEMPT', label: 'Exempt (outside VAT)' },
+  { key: 'STANDARD_INCLUSIVE', label: 'Standard — inclusive' },
+  { key: 'STANDARD_EXCLUSIVE', label: 'Standard — exclusive' },
+  { key: 'ZERO_RATED', label: 'Zero-rated (0%)' },
+  { key: 'EXEMPT', label: 'Exempt' },
 ] as const
 type TaxChoice = (typeof TAX_CHOICES)[number]['key']
 type BizTax = { taxRate: string | null; taxMode: 'INCLUSIVE' | 'EXCLUSIVE'; taxTreatment: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' }
@@ -496,9 +496,13 @@ export default function MenuItems() {
               <Field label="SKU"><input placeholder="Optional — unique" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input" /></Field>
               <Field label="Tax treatment">
                 <select className="input" value={form.taxChoice} onChange={(e) => setForm({ ...form, taxChoice: e.target.value as TaxChoice })}>
-                  {TAX_CHOICES.map((c) => (
-                    <option key={c.key} value={c.key}>{c.key === 'INHERIT' ? `Business default (${describeBizTax(bizTax)})` : c.label}</option>
-                  ))}
+                  {TAX_CHOICES.map((c) => {
+                    const rate = Number(bizTax?.taxRate ?? 16)
+                    const label = c.key === 'INHERIT'
+                      ? `Business default (${describeBizTax(bizTax)})`
+                      : c.key.startsWith('STANDARD') ? `${rate}% ${c.label}` : c.label
+                    return <option key={c.key} value={c.key}>{label}</option>
+                  })}
                 </select>
               </Field>
               <Field label="Tax rate (%)">
