@@ -131,6 +131,7 @@ export const navigation: NavGroup[] = [
       { label: 'Active Orders', href: '/kitchen', icon: LuClipboardList, moduleKey: 'KITCHEN' },
       { label: 'Menu and Addons', href: '/kitchen/menu-addons', icon: LuUtensils },
       { label: 'Menu Categories', href: '/menu/categories', icon: LuLayoutGrid },
+      { label: 'Menu Items', href: '/menu/items', icon: LuUtensils },
       { label: 'Recipes', href: '/kitchen/recipes', icon: LuChefHat },
       { label: 'Daily Expenses', href: '/kitchen/daily-expenses', icon: LuReceipt },
     ],
