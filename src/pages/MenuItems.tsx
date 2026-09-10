@@ -27,6 +27,7 @@ type Temperature = (typeof TEMPERATURES)[number]
 const tempLabel: Record<Temperature, string> = { OTHER: 'Not a drink', HOT: 'Hot drink', COLD: 'Cold drink' }
 
 type Category = { id: string; name: string; isActive: boolean }
+type Location = { id: string; name: string; type: string | null }
 type MenuItem = {
   id: string
   name: string
@@ -45,6 +46,7 @@ type MenuItem = {
   isActive: boolean
   isAvailable: boolean
   sortOrder: number
+  locations: { id: string; name: string }[]
   _count: { orderItems: number; variants: number; addonGroupLinks: number }
 }
 
@@ -132,10 +134,11 @@ type Form = {
   isVegetarian: boolean
   isActive: boolean
   isAvailable: boolean
+  locationIds: string[]
 }
 const emptyForm: Form = {
   name: '', shortName: '', menuCategoryId: '', description: '', sku: '', price: '', taxChoice: 'INHERIT', taxRate: '',
-  photoUrl: '', temperature: 'OTHER', isVegetarian: false, isActive: true, isAvailable: true,
+  photoUrl: '', temperature: 'OTHER', isVegetarian: false, isActive: true, isAvailable: true, locationIds: [],
 }
 
 const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
@@ -158,6 +161,7 @@ export default function MenuItems() {
   const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
   const [groupsFor, setGroupsFor] = useState<MenuItem | null>(null)
   const [bizTax, setBizTax] = useState<BizTax | null>(null)
+  const [locations, setLocations] = useState<Location[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -184,6 +188,7 @@ export default function MenuItems() {
   useEffect(() => {
     api<{ categories: Category[] }>('/menu-categories').then((r) => setCategories(r.categories)).catch(() => {})
     api<{ profile: BizTax | null }>('/business-profile').then((r) => setBizTax(r.profile)).catch(() => {})
+    api<{ locations: Location[] }>('/locations').then((r) => setLocations(r.locations)).catch(() => {})
   }, [])
 
   const summary = useMemo(() => ({
@@ -218,9 +223,13 @@ export default function MenuItems() {
       isVegetarian: item.isVegetarian,
       isActive: item.isActive,
       isAvailable: item.isAvailable,
+      locationIds: item.locations.map((l) => l.id),
     })
     setShowForm(true)
   }
+
+  const toggleLocation = (id: string) =>
+    setForm((f) => ({ ...f, locationIds: f.locationIds.includes(id) ? f.locationIds.filter((x) => x !== id) : [...f.locationIds, id] }))
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -240,6 +249,7 @@ export default function MenuItems() {
         isVegetarian: form.isVegetarian,
         isActive: form.isActive,
         isAvailable: form.isAvailable,
+        locationIds: form.locationIds,
       }
       await api(editing ? `/menu-items/${editing.id}` : '/menu-items', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
       toast.success(editing ? 'Menu item updated.' : 'Menu item created.')
@@ -393,6 +403,9 @@ export default function MenuItems() {
                       <p className="text-xs text-muted-foreground">
                         {[item.shortName, item.sku && `SKU ${item.sku}`].filter(Boolean).join(' · ') || <span className="italic">no short name</span>}
                       </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {item.locations.length > 0 ? `Only at: ${item.locations.map((l) => l.name).join(', ')}` : 'Available everywhere'}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{item.menuCategory.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
@@ -529,6 +542,26 @@ export default function MenuItems() {
                   {TEMPERATURES.map((t) => <option key={t} value={t}>{tempLabel[t]}</option>)}
                 </select>
               </Field>
+            </FieldGroup>
+
+            <FieldGroup title="Available at">
+              <div className="sm:col-span-2">
+                {locations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No locations set up — this item is sellable everywhere. Add selling points under Business to scope items.</p>
+                ) : (
+                  <>
+                    <p className="mb-2 text-xs text-muted-foreground">Leave all unchecked to make this item available at every location (the default). Tick some to limit it.</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {locations.map((l) => (
+                        <label key={l.id} className="flex items-center justify-between rounded-sm border bg-background px-3 py-2 text-sm">
+                          <span>{l.name}{l.type ? <span className="text-muted-foreground"> ({l.type})</span> : null}</span>
+                          <input type="checkbox" checked={form.locationIds.includes(l.id)} onChange={() => toggleLocation(l.id)} className="size-4 accent-secondary" />
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </FieldGroup>
 
             <div className="mt-6 border-t pt-5">
