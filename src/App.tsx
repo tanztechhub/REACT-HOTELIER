@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { LuLoaderCircle, LuTriangleAlert } from "react-icons/lu";
 import AppShell from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
+import SharedReceiptPage from "@/pages/SharedReceiptPage";
 import Dashboard from "@/pages/Dashboard";
 import ModulePlaceholder from "@/pages/ModulePlaceholder";
 import CafeSettings from "@/pages/CafeSettings";
@@ -149,6 +150,7 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/r/:token" element={<SharedReceiptPage />} />
       <Route
         element={
           <ProtectedRoute>
