@@ -17,6 +17,7 @@ import {
 } from "react-icons/lu";
 
 import { api } from "@/lib/api";
+import SharedStatCard from "@/components/ui/StatCard";
 
 type RoomStatus = "VACANT" | "OCCUPIED" | "OUT_OF_SERVICE";
 type Cleanliness = "CLEAN" | "DIRTY" | "INSPECTING";
@@ -417,30 +418,35 @@ export default function Rooms() {
       )}
       <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <SummaryCard
+          index={0}
           label="All rooms"
           value={summary.total}
           icon={<LuBedDouble />}
           tone="secondary"
         />
         <SummaryCard
+          index={1}
           label="Vacant"
           value={summary.vacant}
           icon={<LuDoorOpen />}
           tone="success"
         />
         <SummaryCard
+          index={2}
           label="Occupied"
           value={summary.occupied}
           icon={<LuUsers />}
           tone="secondary"
         />
         <SummaryCard
+          index={3}
           label="Out of service"
           value={summary.outOfService}
           icon={<LuCircleAlert />}
           tone="warning"
         />
         <SummaryCard
+          index={4}
           label="Need cleaning"
           value={summary.dirty}
           icon={<LuSparkles />}
@@ -1010,32 +1016,22 @@ function RoomCard({
   );
 }
 
+const ROOM_TONE_INDEX: Record<"success" | "secondary" | "warning", number> = { success: 1, secondary: 4, warning: 0 };
+
 function SummaryCard({
   icon,
   label,
   value,
   tone,
+  index,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
   tone: "success" | "secondary" | "warning";
+  index?: number;
 }) {
-  return (
-    <div className="rounded-sm border bg-card p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </span>
-        <span
-          className={`flex size-8 items-center justify-center rounded-sm ${tone === "success" ? "bg-success/10 text-success" : tone === "warning" ? "bg-warning/15 text-warning" : "bg-secondary/10 text-secondary"}`}
-        >
-          {icon}
-        </span>
-      </div>
-      <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-    </div>
-  );
+  return <SharedStatCard index={index ?? ROOM_TONE_INDEX[tone]} icon={icon} label={label} value={value} />;
 }
 function Field({
   label,

@@ -14,6 +14,7 @@ import {
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 import { PERMISSION_SECTIONS as sections, sectionLabels, type PermissionSection as Section } from '@/config/navigation'
 
 type Role = {
@@ -139,14 +140,8 @@ export default function RolesAndPermissions() {
           ['Total roles', summary.total, <LuShieldCheck key="all" />],
           ['System roles', summary.system, <LuLock key="system" />],
           ['Custom roles', summary.custom, <LuUserCog key="custom" />],
-        ] as const).map(([label, value, icon]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className="text-secondary">{icon}</span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

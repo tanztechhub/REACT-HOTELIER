@@ -4,6 +4,7 @@ import { LuCircleAlert, LuCircleCheck, LuFolderTree, LuLoaderCircle, LuPencil, L
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 const MAX_LEVEL = 3
 export type CategoryScope = 'STORE' | 'RESTAURANT' | 'BAR' | 'GYM' | 'SPA' | 'ROOMS' | 'ASSETS'
@@ -159,14 +160,8 @@ export default function Categories({ scope = 'STORE', title = 'Categories', subt
           ['Total categories', summary.total, <LuFolderTree key="a" />],
           ['Top-level categories', summary.topLevel, <LuTag key="b" />],
           ['In use', summary.inUse, <LuTag key="c" />],
-        ] as const).map(([label, value, icon]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className="text-secondary">{icon}</span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

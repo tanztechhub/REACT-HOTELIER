@@ -1,7 +1,8 @@
 import { LuTrendingUp, LuBedDouble, LuReceipt, LuUsers, LuLock } from 'react-icons/lu'
+import type { IconType } from 'react-icons'
 import { navigation } from '@/config/navigation'
-import { cn } from '@/lib/utils'
 import { useAppSelector } from '@/store/hooks'
+import StatCard from '@/components/ui/StatCard'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -10,43 +11,14 @@ function getGreeting() {
   return 'Good evening'
 }
 
-type Tone = 'navy' | 'blue' | 'amber' | 'green'
-
-const toneStyles: Record<Tone, { bg: string; fg: string; soft: string; badge: string; ring: string }> = {
-  navy: { bg: 'bg-primary', fg: 'text-primary-foreground', soft: 'text-white/70', badge: 'bg-white/15', ring: 'text-white' },
-  blue: { bg: 'bg-secondary', fg: 'text-secondary-foreground', soft: 'text-white/70', badge: 'bg-white/15', ring: 'text-white' },
-  green: { bg: 'bg-accent', fg: 'text-accent-foreground', soft: 'text-white/70', badge: 'bg-white/15', ring: 'text-white' },
-  amber: { bg: 'bg-warning', fg: 'text-warning-foreground', soft: 'text-black/55', badge: 'bg-black/10', ring: 'text-black' },
-}
-
-const stats: { label: string; value: string; delta: string; icon: typeof LuTrendingUp; tone: Tone }[] = [
-  { label: "Today's Revenue", value: '$4,286', delta: '+12.4% vs yesterday', icon: LuTrendingUp, tone: 'navy' },
-  { label: 'Occupied Rooms', value: '38 / 52', delta: '73% occupancy', icon: LuBedDouble, tone: 'blue' },
-  { label: 'Open Orders', value: '17', delta: '4 in kitchen', icon: LuReceipt, tone: 'amber' },
-  { label: 'Active Staff', value: '12', delta: 'On shift now', icon: LuUsers, tone: 'green' },
+const stats: { label: string; value: string; delta: string; icon: IconType }[] = [
+  { label: "Today's Revenue", value: '$4,286', delta: '+12.4% vs yesterday', icon: LuTrendingUp },
+  { label: 'Occupied Rooms', value: '38 / 52', delta: '73% occupancy', icon: LuBedDouble },
+  { label: 'Open Orders', value: '17', delta: '4 in kitchen', icon: LuReceipt },
+  { label: 'Active Staff', value: '12', delta: 'On shift now', icon: LuUsers },
 ]
 
 const enabledModules = new Set(['POS', 'KITCHEN', 'ROOMS', 'RECEPTION', 'HOUSEKEEPING'])
-
-function FingerprintRings({ className }: { className?: string }) {
-  const radii = [14, 28, 42, 56, 70, 84]
-  return (
-    <svg viewBox="0 0 160 160" className={className} aria-hidden="true">
-      {radii.map((r, i) => (
-        <circle
-          key={r}
-          cx="150"
-          cy="10"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeOpacity={0.22 - i * 0.03}
-          strokeWidth="1.5"
-        />
-      ))}
-    </svg>
-  )
-}
 
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
@@ -68,29 +40,16 @@ export default function Dashboard() {
       </header>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const tone = toneStyles[stat.tone]
-          return (
-            <div
-              key={stat.label}
-              className={cn('relative overflow-hidden rounded-sm p-5 shadow-sm', tone.bg)}
-            >
-              <FingerprintRings className={cn('pointer-events-none absolute -right-2 -top-2 size-32', tone.ring)} />
-              <div className="relative flex items-center justify-between">
-                <span className={cn('text-xs font-medium uppercase tracking-wide', tone.soft)}>
-                  {stat.label}
-                </span>
-                <span className={cn('flex size-8 items-center justify-center rounded-sm', tone.badge, tone.fg)}>
-                  <stat.icon className="size-4" />
-                </span>
-              </div>
-              <p className={cn('relative mt-3 font-display text-2xl font-semibold', tone.fg)}>
-                {stat.value}
-              </p>
-              <p className={cn('relative mt-1 text-xs', tone.soft)}>{stat.delta}</p>
-            </div>
-          )
-        })}
+        {stats.map((stat, i) => (
+          <StatCard
+            key={stat.label}
+            index={i}
+            label={stat.label}
+            value={stat.value}
+            hint={stat.delta}
+            icon={<stat.icon className="size-4" />}
+          />
+        ))}
       </section>
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">

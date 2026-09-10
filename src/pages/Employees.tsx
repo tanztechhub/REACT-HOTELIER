@@ -15,6 +15,7 @@ import {
 
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
+import StatCard from '@/components/ui/StatCard'
 
 const genders = ['MALE', 'FEMALE', 'OTHER'] as const
 const employmentTypes = ['FULL_TIME', 'PART_TIME', 'CASUAL', 'CONTRACT', 'INTERN'] as const
@@ -290,14 +291,8 @@ export default function Employees() {
           ['Total employees', summary.total, <LuUsers key="all" />],
           ['Active', summary.active, <LuUserCheck key="active" />],
           ['On leave', summary.onLeave, <LuBriefcaseBusiness key="leave" />],
-        ] as const).map(([label, value, icon]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className="text-secondary">{icon}</span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { LuCalendarDays, LuCircleAlert, LuLoaderCircle, LuReceiptText, LuTrendingUp, LuTriangleAlert, LuUsers, LuWallet } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 type MethodBucket = { method: string; count: number; total: number }
 type CashierBucket = { name: string; count: number; total: number }
@@ -97,14 +97,8 @@ export default function Reports() {
               ['Completed orders', report.summary.completedOrders, <LuReceiptText key="b" />, false],
               ['Average order value', formatKes(report.summary.averageOrderValue), <LuTrendingUp key="c" />, false],
               ['Outstanding balance', formatKes(report.summary.outstandingBalance), <LuTriangleAlert key="d" />, report.summary.outstandingBalance > 0],
-            ] as const).map(([label, value, icon, warn]) => (
-              <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-sm font-medium">{label}</span>
-                  <span className={warn ? 'text-warning' : 'text-secondary'}>{icon}</span>
-                </div>
-                <p className={cn('mt-2 font-display text-2xl font-semibold', warn && 'text-warning')}>{value}</p>
-              </div>
+            ] as const).map(([label, value, icon, warn], i) => (
+              <StatCard key={label} index={i} tone={warn ? 'warn' : undefined} label={label} value={value} icon={icon} />
             ))}
           </section>
 

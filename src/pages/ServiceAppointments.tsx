@@ -14,6 +14,7 @@ import {
   LuUsers,
 } from "react-icons/lu";
 import { api } from "@/lib/api";
+import SharedStatCard from "@/components/ui/StatCard";
 
 type Customer = {
   id: string;
@@ -285,13 +286,15 @@ export default function ServiceAppointments() {
       {notice && <Message text={notice} />}
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
+          index={0}
           icon={<LuCalendarCheck />}
           label="All appointments"
           value={summary.total}
         />
-        <Metric icon={<LuClock3 />} label="Today" value={summary.today} />
-        <Metric icon={<LuUsers />} label="Upcoming" value={summary.upcoming} />
+        <Metric index={1} icon={<LuClock3 />} label="Today" value={summary.today} />
+        <Metric index={2} icon={<LuUsers />} label="Upcoming" value={summary.upcoming} />
         <Metric
+          index={3}
           icon={<LuCheck />}
           label="Completed"
           value={summary.completed}
@@ -622,22 +625,14 @@ function Metric({
   icon,
   label,
   value,
+  index,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number;
+  index?: number;
 }) {
-  return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
-      <div className="flex justify-between text-secondary">
-        <span className="text-xs font-bold uppercase text-muted-foreground">
-          {label}
-        </span>
-        {icon}
-      </div>
-      <p className="mt-2 text-3xl font-bold">{value}</p>
-    </div>
-  );
+  return <SharedStatCard index={index} icon={icon} label={label} value={value} />;
 }
 function Field({
   label,

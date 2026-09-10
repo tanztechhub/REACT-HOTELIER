@@ -13,7 +13,7 @@ import {
 } from "react-icons/lu";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
-import { cn } from "@/lib/utils";
+import SharedStatCard from "@/components/ui/StatCard";
 
 const RESERVATION_SOURCES = ["WALK_IN", "PHONE", "WEBSITE", "BOOKING_ENGINE", "TRAVEL_AGENT", "OTA", "CORPORATE", "OTHER"] as const;
 const CANCELLATION_REASONS = ["CHANGED_MIND", "NO_SHOW", "FOUND_ALTERNATIVE", "DUPLICATE_BOOKING", "HOTEL_CANCELLED", "OTHER"] as const;
@@ -768,36 +768,10 @@ function FieldGroup({ title, children }: { title: string; children: ReactNode })
   );
 }
 
-type Tone = "primary" | "secondary" | "accent";
-const toneStyles: Record<Tone, { bg: string; fg: string; soft: string; badge: string; ring: string }> = {
-  primary: { bg: "bg-primary", fg: "text-primary-foreground", soft: "text-white/70", badge: "bg-white/15", ring: "text-white" },
-  secondary: { bg: "bg-secondary", fg: "text-secondary-foreground", soft: "text-white/70", badge: "bg-white/15", ring: "text-white" },
-  accent: { bg: "bg-accent", fg: "text-accent-foreground", soft: "text-white/70", badge: "bg-white/15", ring: "text-white" },
-};
+const TONE_INDEX: Record<"primary" | "secondary" | "accent", number> = { primary: 2, secondary: 4, accent: 1 };
 
-function FingerprintRings({ className }: { className?: string }) {
-  const radii = [14, 28, 42, 56, 70, 84];
-  return (
-    <svg viewBox="0 0 160 160" className={className} aria-hidden="true">
-      {radii.map((r, i) => (
-        <circle key={r} cx="150" cy="10" r={r} fill="none" stroke="currentColor" strokeOpacity={0.22 - i * 0.03} strokeWidth="1.5" />
-      ))}
-    </svg>
-  );
-}
-
-function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: Tone }) {
-  const t = toneStyles[tone];
-  return (
-    <div className={cn("relative overflow-hidden rounded-sm p-5 shadow-sm", t.bg)}>
-      <FingerprintRings className={cn("pointer-events-none absolute -right-2 -top-2 size-32", t.ring)} />
-      <div className="relative flex items-center justify-between">
-        <span className={cn("text-xs font-medium uppercase tracking-wide", t.soft)}>{label}</span>
-        <span className={cn("flex size-8 items-center justify-center rounded-sm", t.badge, t.fg)}>{icon}</span>
-      </div>
-      <p className={cn("relative mt-3 font-display text-2xl font-semibold", t.fg)}>{value}</p>
-    </div>
-  );
+function StatCard({ icon, label, value, tone }: { icon: ReactNode; label: string; value: number; tone: "primary" | "secondary" | "accent" }) {
+  return <SharedStatCard index={TONE_INDEX[tone]} icon={icon} label={label} value={value} />;
 }
 function Msg({ text, error = false }: { text: string; error?: boolean }) {
   return (

@@ -15,6 +15,7 @@ import {
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 type Supplier = {
   id: string
@@ -194,14 +195,8 @@ export default function Suppliers() {
           ['Total suppliers', summary.total],
           ['Active', summary.active],
           ['Balance owed', formatKes(summary.totalBalance)],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className="text-secondary"><LuTruck /></span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={<LuTruck />} />
         ))}
       </section>
 

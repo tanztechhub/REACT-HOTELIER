@@ -16,6 +16,7 @@ import {
   LuUsers,
 } from "react-icons/lu";
 import { api } from "@/lib/api";
+import SharedStatCard from "@/components/ui/StatCard";
 
 type Status = "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
 type Customer = {
@@ -345,17 +346,20 @@ export default function ServiceMemberships() {
       {notice && <Message text={notice} />}
       <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
+          index={0}
           icon={<LuUsers />}
           label="All memberships"
           value={summary.total}
         />
-        <Metric icon={<LuBadgeCheck />} label="Active" value={summary.active} />
+        <Metric index={1} icon={<LuBadgeCheck />} label="Active" value={summary.active} />
         <Metric
+          index={2}
           icon={<LuCalendarClock />}
           label="Expiring in 30 days"
           value={summary.expiringSoon}
         />
         <Metric
+          index={3}
           icon={<LuCircleDollarSign />}
           label="Paid revenue"
           value={money(summary.revenue)}
@@ -683,20 +687,14 @@ function Metric({
   icon,
   label,
   value,
+  index,
 }: {
   icon: ReactNode;
   label: string;
   value: ReactNode;
+  index?: number;
 }) {
-  return (
-    <div className="rounded-2xl border bg-card p-5 shadow-sm">
-      <span className="inline-flex rounded-xl bg-purple-100 p-2.5 text-purple-700">
-        {icon}
-      </span>
-      <p className="mt-4 text-2xl font-bold">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
-  );
+  return <SharedStatCard index={index} icon={icon} label={label} value={value} />;
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (

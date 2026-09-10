@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LuArrowDownLeft, LuArrowUpRight, LuCircleAlert, LuLoaderCircle, LuSearch } from 'react-icons/lu'
+import { LuArrowDownLeft, LuArrowLeftRight, LuArrowUpRight, LuCircleAlert, LuLoaderCircle, LuSearch } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
 const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { maximumFractionDigits: 2 })}`
@@ -78,18 +79,9 @@ export default function Transactions() {
       </header>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-sm border bg-card p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase text-muted-foreground">Money in</p>
-          <p className="mt-1 font-display text-xl font-semibold text-success">{formatKes(summary.totalIn)}</p>
-        </div>
-        <div className="rounded-sm border bg-card p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase text-muted-foreground">Money out</p>
-          <p className="mt-1 font-display text-xl font-semibold text-destructive">{formatKes(summary.totalOut)}</p>
-        </div>
-        <div className="rounded-sm border bg-card p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase text-muted-foreground">Transactions</p>
-          <p className="mt-1 font-display text-xl font-semibold">{summary.count}</p>
-        </div>
+        <StatCard tone="success" icon={<LuArrowDownLeft />} label="Money in" value={formatKes(summary.totalIn)} />
+        <StatCard tone="danger" icon={<LuArrowUpRight />} label="Money out" value={formatKes(summary.totalOut)} />
+        <StatCard index={2} icon={<LuArrowLeftRight />} label="Transactions" value={summary.count} />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">

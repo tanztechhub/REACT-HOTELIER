@@ -115,8 +115,8 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Point of Sale', href: '/pos', icon: LuShoppingCart, moduleKey: 'POS' },
       { label: 'Products POS', href: '/sales/products-pos', icon: LuPackage },
-      { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
       { label: 'Receipts', href: '/sales/receipts', icon: LuReceiptText },
+      { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
       { label: 'Customers', href: '/sales/customers', icon: LuUsers },
       { label: 'Riders', href: '/sales/riders', icon: LuBike },
       { label: 'Deliveries', href: '/sales/deliveries', icon: LuTruck },

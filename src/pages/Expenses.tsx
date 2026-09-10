@@ -4,6 +4,7 @@ import { LuArchive, LuArchiveRestore, LuCircleAlert, LuCircleCheck, LuLoaderCirc
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 import { useAppSelector } from '@/store/hooks'
 
 const date = () => new Date().toISOString().slice(0, 10)
@@ -190,10 +191,7 @@ export default function Expenses() {
       )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-sm border bg-card p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase text-muted-foreground">Total (active)</p>
-          <p className="mt-1 font-display text-xl font-semibold text-destructive">{formatKes(summary.total)}</p>
-        </div>
+        <StatCard tone="danger" icon={<LuWallet />} label="Total (active)" value={formatKes(summary.total)} />
         <div className="rounded-sm border bg-card p-4 shadow-sm sm:col-span-2">
           <p className="text-xs font-bold uppercase text-muted-foreground">By category</p>
           {summary.byCategory.length === 0 ? (

@@ -8,11 +8,15 @@ import {
   LuPlus,
   LuPrinter,
   LuSearch,
+  LuShoppingBag,
   LuTrash2,
+  LuTruck,
+  LuWallet,
   LuX,
 } from 'react-icons/lu'
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
+import StatCard from '@/components/ui/StatCard'
 import { cn } from '@/lib/utils'
 import type { DocProfile } from '@/components/documents/pdf'
 
@@ -275,15 +279,12 @@ export default function Purchases() {
 
       <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {([
-          ['Total', summary.total],
-          ['Draft', summary.byStatus.DRAFT],
-          ['Ordered', summary.byStatus.ORDERED],
-          ['Open value', formatKes(summary.openValue)],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <span className="text-sm font-medium text-muted-foreground">{label}</span>
-            <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
-          </div>
+          ['Total', summary.total, <LuShoppingBag key="i" />],
+          ['Draft', summary.byStatus.DRAFT, <LuPencil key="i" />],
+          ['Ordered', summary.byStatus.ORDERED, <LuTruck key="i" />],
+          ['Open value', formatKes(summary.openValue), <LuWallet key="i" />],
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

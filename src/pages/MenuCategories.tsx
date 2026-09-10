@@ -132,7 +132,7 @@ export default function MenuCategories() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-secondary">{categories.length} · Menu</p>
         <h1 className="mt-1 font-display text-3xl font-semibold">Menu Categories</h1>

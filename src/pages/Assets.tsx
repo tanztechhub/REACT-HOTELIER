@@ -15,6 +15,7 @@ import {
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 const UNITS_OF_MEASURE = [
   'Each', 'Pieces', 'Kg', 'Grams', 'Litres', 'Millilitres', 'Box', 'Carton',
@@ -248,14 +249,8 @@ export default function Assets() {
         {([
           ['Total assets', summary.total, <LuBoxes key="a" />],
           ['Total value', formatKes(summary.totalValue), <LuClipboardList key="b" />],
-        ] as const).map(([label, value, icon]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className="text-secondary">{icon}</span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

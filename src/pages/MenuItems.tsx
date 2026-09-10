@@ -20,6 +20,7 @@ import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
+import SearchableSelect from '@/components/ui/SearchableSelect'
 
 const TEMPERATURES = ['OTHER', 'HOT', 'COLD'] as const
 type Temperature = (typeof TEMPERATURES)[number]
@@ -151,6 +152,7 @@ export default function MenuItems() {
   const [form, setForm] = useState<Form>(emptyForm)
   const [editing, setEditing] = useState<MenuItem | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
@@ -194,12 +196,14 @@ export default function MenuItems() {
 
   function openCreate() {
     setEditing(null)
+    setShowCategoryModal(false)
     setForm({ ...emptyForm, menuCategoryId: categoryFilter || categories.find((c) => c.isActive)?.id || '' })
     setShowForm(true)
   }
 
   function openEdit(item: MenuItem) {
     setEditing(item)
+    setShowCategoryModal(false)
     setForm({
       name: item.name,
       shortName: item.shortName ?? '',
@@ -469,12 +473,26 @@ export default function MenuItems() {
             <FieldGroup title="Basics">
               <Field label="Name" required className="sm:col-span-2"><input required autoFocus placeholder="e.g. Chicken Burger" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" /></Field>
               <Field label="Short name"><input placeholder="Receipt / KOT label" value={form.shortName} onChange={(e) => setForm({ ...form, shortName: e.target.value })} className="input" /></Field>
-              <Field label="Category" required>
-                <select required className="input" value={form.menuCategoryId} onChange={(e) => setForm({ ...form, menuCategoryId: e.target.value })}>
-                  <option value="" disabled>Select category</option>
-                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}{c.isActive ? '' : ' (inactive)'}</option>)}
-                </select>
-              </Field>
+              <div className="block text-sm font-medium">
+                Category <span className="text-destructive">*</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(true)}
+                  className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-secondary hover:underline"
+                >
+                  <LuPlus className="size-3.5" /> New category
+                </button>
+                <span className="mt-1.5 block">
+                  <SearchableSelect
+                    options={categories.map((c) => ({ value: c.id, label: c.name, hint: c.isActive ? undefined : 'inactive' }))}
+                    value={form.menuCategoryId}
+                    onChange={(value) => setForm({ ...form, menuCategoryId: value })}
+                    placeholder="Select category"
+                    searchPlaceholder="Search categories…"
+                    emptyText="No categories match."
+                  />
+                </span>
+              </div>
               <Field label="Description" className="sm:col-span-2"><textarea rows={2} placeholder="Shown on the menu" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input" /></Field>
               <Field label="Image URL" className="sm:col-span-2">
                 <input type="url" placeholder="https://…" value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} className="input" />
@@ -543,6 +561,17 @@ export default function MenuItems() {
         </div>
       )}
 
+      {showForm && showCategoryModal && (
+        <NewMenuCategoryModal
+          onClose={() => setShowCategoryModal(false)}
+          onCreated={(category) => {
+            setCategories((prev) => (prev.some((c) => c.id === category.id) ? prev : [...prev, category]))
+            setForm((f) => ({ ...f, menuCategoryId: category.id }))
+            setShowCategoryModal(false)
+          }}
+        />
+      )}
+
       {variantsFor && (
         <VariantsModal item={variantsFor} onClose={() => setVariantsFor(null)} onChanged={load} />
       )}
@@ -550,6 +579,60 @@ export default function MenuItems() {
       {groupsFor && (
         <ItemAddonGroupsModal item={groupsFor} onClose={() => setGroupsFor(null)} onChanged={load} />
       )}
+    </div>
+  )
+}
+
+/** Minimal category create — just the one required field (name). Saves via the
+ * same POST /menu-categories the Menu Categories page uses, then hands the new
+ * record back so the form can select it. */
+function NewMenuCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreated: (category: Category) => void }) {
+  const toast = useToast()
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!name.trim() || saving) return
+    setSaving(true)
+    try {
+      const { category } = await api<{ category: Category }>('/menu-categories', {
+        method: 'POST',
+        body: JSON.stringify({ name: name.trim() }),
+      })
+      toast.success('Category created.')
+      onCreated(category)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not create category')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-sm border bg-card p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-secondary">New category</p>
+            <h2 className="mt-1 font-display text-xl font-semibold">Add a menu category</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LuX className="size-4" /></button>
+        </div>
+
+        <label className="mt-5 block text-sm font-medium">
+          Name <span className="text-destructive">*</span>
+          <input autoFocus required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Hot Drinks" className="input mt-1.5" />
+        </label>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+          <button disabled={saving || !name.trim()} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            {saving && <LuLoaderCircle className="animate-spin" />}
+            Create category
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { LuCircleAlert, LuCircleCheck, LuLoaderCircle, LuLock, LuPackageCheck, L
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 import { useAppSelector } from '@/store/hooks'
 
 const date = () => new Date().toISOString().slice(0, 10)
@@ -157,10 +158,13 @@ export default function LostAndFound() {
       {error && <Msg error text={error} />}
       {notice && <Msg text={notice} />}
 
-      <div className="mt-6 rounded-sm border bg-card p-4 shadow-sm">
-        <p className="text-xs font-bold uppercase text-muted-foreground">Awaiting collection</p>
-        <p className="mt-1 font-display text-xl font-semibold text-warning">{unclaimedCount} item{unclaimedCount === 1 ? '' : 's'}</p>
-      </div>
+      <StatCard
+        tone="warn"
+        className="mt-6 sm:w-72"
+        icon={<LuPackageCheck />}
+        label="Awaiting collection"
+        value={`${unclaimedCount} item${unclaimedCount === 1 ? '' : 's'}`}
+      />
 
       <div className="mt-6 flex flex-wrap gap-3">
         <label className="relative min-w-56 flex-1">

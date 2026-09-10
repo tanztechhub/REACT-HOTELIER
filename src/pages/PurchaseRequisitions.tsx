@@ -3,16 +3,20 @@ import type { FormEvent, ReactNode } from 'react'
 import {
   LuCircleAlert,
   LuCircleCheck,
+  LuClipboardList,
+  LuHourglass,
   LuLoaderCircle,
   LuPencil,
   LuPlus,
   LuPrinter,
+  LuRepeat,
   LuSearch,
   LuTrash2,
   LuX,
 } from 'react-icons/lu'
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
+import StatCard from '@/components/ui/StatCard'
 import { useAppSelector } from '@/store/hooks'
 import { cn } from '@/lib/utils'
 import type { DocProfile } from '@/components/documents/pdf'
@@ -328,15 +332,12 @@ export default function PurchaseRequisitions() {
 
       <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {([
-          ['Total', summary.total],
-          ['Awaiting review', summary.awaitingReview],
-          ['Approved', summary.byStatus.APPROVED],
-          ['Converted', summary.byStatus.CONVERTED],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <span className="text-sm font-medium text-muted-foreground">{label}</span>
-            <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
-          </div>
+          ['Total', summary.total, <LuClipboardList key="i" />],
+          ['Awaiting review', summary.awaitingReview, <LuHourglass key="i" />],
+          ['Approved', summary.byStatus.APPROVED, <LuCircleCheck key="i" />],
+          ['Converted', summary.byStatus.CONVERTED, <LuRepeat key="i" />],
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 

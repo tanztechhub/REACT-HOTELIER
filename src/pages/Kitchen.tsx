@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LuChefHat, LuCheck, LuCircleAlert, LuClock3, LuCoffee, LuFlame, LuGlassWater, LuLoaderCircle, LuPackageCheck, LuRefreshCw, LuSparkles, LuUtensilsCrossed } from 'react-icons/lu'
 
 import { api } from '@/lib/api'
+import StatCard from '@/components/ui/StatCard'
 
 type Product = { id: string; name: string; unit: string; stocks: { quantity: string | number }[] }
 type Ingredient = { quantity: string | number; product: Product }
@@ -79,7 +80,7 @@ export default function Kitchen() {
     {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
     {notice && <div className="mt-5 flex items-center gap-2 rounded-sm border border-success/25 bg-success/10 p-3 text-sm text-success"><LuCheck />{notice}</div>}
 
-    <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric label="New tickets" value={counts.new} icon={<LuClock3 />} tone="secondary" /><Metric label="In preparation" value={counts.preparing} icon={<LuFlame />} tone="warning" /><Metric label="Hot queue" value={counts.hot} icon={<LuCoffee />} tone="warning" /><Metric label="Cold queue" value={counts.cold} icon={<LuGlassWater />} tone="secondary" /></section>
+    <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric index={0} label="New tickets" value={counts.new} icon={<LuClock3 />} tone="secondary" /><Metric index={1} label="In preparation" value={counts.preparing} icon={<LuFlame />} tone="warning" /><Metric index={2} label="Hot queue" value={counts.hot} icon={<LuCoffee />} tone="warning" /><Metric index={3} label="Cold queue" value={counts.cold} icon={<LuGlassWater />} tone="secondary" /></section>
 
     <div className="mt-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-display text-xl font-semibold">Active preparation queue</h2><p className="text-sm text-muted-foreground">Oldest tickets appear first.</p></div><div className="flex flex-wrap rounded-sm border bg-card p-1 shadow-sm">{(['All', 'Hot', 'Cold', 'Bakery'] as const).map((station) => <button key={station} onClick={() => setActiveStation(station)} className={`rounded-sm px-4 py-2 text-sm font-semibold transition ${activeStation === station ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted'}`}>{station}</button>)}</div></div>
 
@@ -89,7 +90,8 @@ export default function Kitchen() {
   </div>
 }
 
-function Metric({ label, value, icon, tone }: { label: string; value: number; icon: React.ReactNode; tone: 'secondary' | 'warning' }) { return <div className="rounded-sm border bg-card p-5 shadow-sm"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</span><span className={`flex size-9 items-center justify-center rounded-sm ${tone === 'warning' ? 'bg-warning/15 text-warning' : 'bg-secondary/10 text-secondary'}`}>{icon}</span></div><p className="mt-2 font-display text-3xl font-semibold">{value}</p></div> }
+const KITCHEN_TONE_INDEX: Record<'secondary' | 'warning', number> = { secondary: 4, warning: 0 }
+function Metric({ label, value, icon, tone, index }: { label: string; value: number; icon: React.ReactNode; tone: 'secondary' | 'warning'; index?: number }) { return <StatCard index={index ?? KITCHEN_TONE_INDEX[tone]} icon={icon} label={label} value={value} /> }
 
 function Ticket({ order, now, working, onAdvance }: { order: Order; now: number; working: boolean; onAdvance: () => void }) {
   const stations = Array.from(new Set(order.items.map((item) => stationFor(item.menuItem))) )

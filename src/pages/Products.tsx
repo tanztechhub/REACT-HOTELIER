@@ -17,6 +17,7 @@ import {
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 import UnitsOfMeasureModal from '@/components/UnitsOfMeasureModal'
 
 const UNITS_OF_MEASURE = [
@@ -278,14 +279,15 @@ export default function Products() {
           ['Active', summary.active, <LuBoxes key="b" />],
           ['Inactive', summary.inactive, <LuBoxes key="c" />],
           ['Low stock', summary.lowStock, <LuTriangleAlert key="d" />],
-        ] as const).map(([label, value, icon]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-sm font-medium">{label}</span>
-              <span className={label === 'Low stock' && Number(value) > 0 ? 'text-warning' : 'text-secondary'}>{icon}</span>
-            </div>
-            <p className="mt-2 font-display text-3xl font-semibold">{value}</p>
-          </div>
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard
+            key={label}
+            index={i}
+            tone={label === 'Low stock' && Number(value) > 0 ? 'warn' : undefined}
+            label={label}
+            value={value}
+            icon={icon}
+          />
         ))}
       </section>
 
