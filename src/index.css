@@ -168,13 +168,12 @@
      <main> pane is the only scroll container (its bar is hidden). Pinning the
      document to the viewport stops a stray body/root scrollbar from eating a
      strip off the right edge on mobile, which reads as the page being
-     off-centre. */
+     off-centre. Pull-to-refresh is re-implemented on <main> in AppShell. */
   html,
   body,
   #root {
     height: 100%;
     overflow: hidden;
-    overscroll-behavior: none;
   }
 
   body {

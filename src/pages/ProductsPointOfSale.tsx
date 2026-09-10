@@ -214,16 +214,18 @@ export default function ProductsPointOfSale() {
                 const inCart = cart.find((c) => c.id === item.id)?.quantity ?? 0
                 const soldOut = inCart >= item.availableQuantity
                 return (
-                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className={cn('group relative overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
+                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className={cn('group relative flex flex-col overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
                     <div className="flex items-start justify-between gap-2">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-accent/10 text-accent sm:size-11"><LuPackage className="size-5" /></span>
                       <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category?.name ?? 'Uncategorized'}</span>
                     </div>
                     <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
                     <p className="mt-1 text-xs text-muted-foreground">{item.availableQuantity - inCart} {item.unit} left</p>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3 sm:mt-4 sm:pt-4">
-                      <span className="whitespace-nowrap text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
-                      <span className={cn('ml-auto flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : <LuPlus />}</span>
+                    <div className="mt-3 border-t pt-3 sm:mt-4 sm:pt-4">
+                      <span className="text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
+                      <span className={cn('mt-3 flex w-full items-center justify-center gap-1.5 rounded-sm py-2 text-xs font-bold uppercase tracking-wide shadow-md transition group-hover:brightness-95', justAdded === item.id ? 'bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>
+                        {justAdded === item.id ? <><LuCheck className="size-4" /> Added</> : soldOut ? 'Sold out' : <><LuPlus className="size-4" /> Add</>}
+                      </span>
                     </div>
                   </button>
                 )

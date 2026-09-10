@@ -525,13 +525,10 @@ export default function PointOfSale() {
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
                   {visibleItems.map((item) => {
-                    const badge = (
-                      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>
-                        {justAdded === item.id ? <LuCheck className="size-4" /> : needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}
-                      </span>
-                    )
+                    const added = justAdded === item.id
+                    const customize = needsCustomize(item, allAddons.length)
                     return (
-                      <button key={item.id} onClick={() => onItemClick(item)} className={cn('group relative overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
+                      <button key={item.id} onClick={() => onItemClick(item)} className={cn('group relative flex flex-col overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5', added ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
                         <div className="flex items-start justify-between gap-2">
                           <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-sm sm:size-11', item.temperature === 'HOT' ? 'bg-warning/15 text-warning' : item.temperature === 'COLD' ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent')}><LuCoffee className="size-5" /></span>
                           <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category.name}</span>
@@ -539,29 +536,29 @@ export default function PointOfSale() {
                         <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground sm:min-h-10">{item.description || item.category.name}</p>
 
-                        {item.variants.length > 0 ? (
-                          <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3 sm:mt-4 sm:pt-4">
-                            <ul className="min-w-0 flex-1 space-y-0.5 text-[11px] leading-tight">
+                        <div className="mt-3 border-t pt-3 sm:mt-4 sm:pt-4">
+                          {item.variants.length > 0 ? (
+                            <ul className="space-y-0.5 text-[11px] leading-tight">
                               {item.variants.slice(0, 4).map((v) => (
-                                <li key={v.id} className="flex justify-between gap-2">
+                                <li key={v.id} className="flex items-baseline justify-between gap-2">
                                   <span className="truncate text-muted-foreground">{v.name}</span>
                                   <span className="shrink-0 font-semibold text-foreground">{formatKes(v.price)}</span>
                                 </li>
                               ))}
                               {item.variants.length > 4 && <li className="text-[10px] text-muted-foreground">+{item.variants.length - 4} more</li>}
                             </ul>
-                            {badge}
-                          </div>
-                        ) : (
-                          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3 sm:mt-4 sm:pt-4">
-                            <span className="whitespace-nowrap text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
-                            <span className="ml-auto">{badge}</span>
-                          </div>
-                        )}
+                          ) : (
+                            <span className="text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
+                          )}
 
-                        {item.allowsAddons && allAddons.length > 0 && (
-                          <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">Add-ons</span>
-                        )}
+                          {item.allowsAddons && allAddons.length > 0 && (
+                            <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-wide text-accent">Has add-ons</span>
+                          )}
+
+                          <span className={cn('mt-3 flex w-full items-center justify-center gap-1.5 rounded-sm py-2 text-xs font-bold uppercase tracking-wide shadow-md transition group-hover:brightness-95', added ? 'bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>
+                            {added ? <><LuCheck className="size-4" /> Added</> : customize ? <><LuSlidersHorizontal className="size-4" /> Options</> : <><LuPlus className="size-4" /> Add</>}
+                          </span>
+                        </div>
                       </button>
                     )
                   })}
