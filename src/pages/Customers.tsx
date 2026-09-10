@@ -8,6 +8,8 @@ import {
   LuPlus,
   LuSearch,
   LuTrash2,
+  LuWallet,
+  LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import Button from '@/components/ui/Button'
@@ -61,6 +63,7 @@ type Customer = {
   contactMethod: ContactMethod | null
   marketingConsent: boolean
   loyaltyPoints: number
+  balance?: string | number | null
   emergencyContactName: string | null
   emergencyContactRelationship: string | null
   emergencyContactPhone: string | null
@@ -166,6 +169,7 @@ export default function Customers() {
   const [form, setForm] = useState<CustomerForm>(emptyForm)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [creditFor, setCreditFor] = useState<Customer | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -314,6 +318,7 @@ export default function Customers() {
                   <th className="px-5 py-3">Contact</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Loyalty</th>
+                  <th className="px-5 py-3 text-right">Balance</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -345,8 +350,16 @@ export default function Customers() {
                       <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', statusStyles[customer.status])}>{titleCase(customer.status)}</span>
                     </td>
                     <td className="px-5 py-4 text-muted-foreground">{customer.loyaltyPoints} pts</td>
+                    <td className="px-5 py-4 text-right tabular-nums">
+                      {Number(customer.balance ?? 0) > 0
+                        ? <span className="font-semibold text-warning">KSh {Number(customer.balance).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => setCreditFor(customer)} title="Credit history" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary">
+                          <LuWallet />
+                        </button>
                         <button onClick={() => openEdit(customer)} title="Edit customer" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary">
                           <LuPencil />
                         </button>
@@ -480,6 +493,78 @@ export default function Customers() {
           </form>
         </div>
       )}
+
+      {creditFor && <CreditHistoryModal customer={creditFor} onClose={() => setCreditFor(null)} />}
+    </div>
+  )
+}
+
+type CreditEntry = {
+  id: string
+  type: 'CREDIT' | 'REPAYMENT' | 'ADJUSTMENT'
+  amount: string
+  balanceAfter: string
+  note: string | null
+  createdAt: string
+  order: { orderNumber: number } | null
+}
+
+function CreditHistoryModal({ customer, onClose }: { customer: Customer; onClose: () => void }) {
+  const [data, setData] = useState<{ balance: string; entries: CreditEntry[]; creditCount: number; totalCreditTaken: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+
+  useEffect(() => {
+    setLoading(true)
+    api<{ balance: string; entries: CreditEntry[]; creditCount: number; totalCreditTaken: string }>(`/customers/${customer.id}/credit-entries`)
+      .then(setData).catch(() => setData(null)).finally(() => setLoading(false))
+  }, [customer.id])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="grid max-h-[85vh] w-full max-w-lg grid-rows-[auto_1fr] overflow-hidden rounded-sm border bg-card shadow-2xl">
+        <div className="flex items-center justify-between border-b p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Credit history</p>
+            <h2 className="font-display text-xl font-semibold">{customer.firstName} {customer.lastName ?? ''}</h2>
+          </div>
+          <button onClick={onClose} className="rounded-sm p-2 text-muted-foreground hover:bg-muted"><LuX /></button>
+        </div>
+        <div className="overflow-y-auto p-4">
+          {loading ? (
+            <div className="flex min-h-32 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
+          ) : !data ? (
+            <p className="text-sm text-muted-foreground">Could not load the statement.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-sm bg-muted/50 p-3"><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Owes now</p><p className={cn('mt-1 text-lg font-bold', Number(data.balance) > 0 ? 'text-warning' : 'text-success')}>{money(data.balance)}</p></div>
+                <div className="rounded-sm bg-muted/50 p-3"><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Times on credit</p><p className="mt-1 text-lg font-bold">{data.creditCount}</p></div>
+                <div className="rounded-sm bg-muted/50 p-3"><p className="text-[11px] uppercase tracking-wide text-muted-foreground">Total taken</p><p className="mt-1 text-lg font-bold">{money(data.totalCreditTaken)}</p></div>
+              </div>
+              <div className="mt-4 space-y-1.5">
+                {data.entries.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">No credit activity yet.</p>
+                ) : data.entries.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 rounded-sm border p-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {e.type === 'CREDIT' ? 'Taken on credit' : e.type === 'REPAYMENT' ? 'Repayment' : 'Adjustment'}
+                        {e.order && <span className="text-muted-foreground"> · order #{e.order.orderNumber}</span>}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{new Date(e.createdAt).toLocaleString()}{e.note ? ` · ${e.note}` : ''}</p>
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums">
+                      <p className={cn('font-semibold', Number(e.amount) > 0 ? 'text-warning' : 'text-success')}>{Number(e.amount) > 0 ? '+' : ''}{money(e.amount)}</p>
+                      <p className="text-[11px] text-muted-foreground">bal {money(e.balanceAfter)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

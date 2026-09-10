@@ -89,6 +89,39 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
     return () => window.clearTimeout(timer)
   }, [mode, staySearch])
 
+  async function completeOrder() {
+    if (!order || settling) return
+    if (remaining > 0.01) {
+      if (!order.customer) { setCustModalOpen(true); return }
+      const who = `${order.customer.firstName} ${order.customer.lastName ?? ''}`.trim()
+      if (!window.confirm(`${formatKes(remaining)} will be added to ${who}'s balance as credit. Complete the order now?`)) return
+    }
+    setError('')
+    setSettling(true)
+    try {
+      const response = await api<{ order: Order }>(`/pos/orders/${order.id}/settle`, { method: 'POST', body: JSON.stringify({}) })
+      setOrder(response.order)
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not complete this order')
+    } finally {
+      setSettling(false)
+    }
+  }
+
+  async function attachCustomer(party: SaleParty) {
+    setCustModalOpen(false)
+    if (!order || party.kind !== 'CUSTOMER') return
+    setError('')
+    try {
+      const response = await api<{ order: Order }>(`/pos/orders/${order.id}/customer`, { method: 'POST', body: JSON.stringify({ customerId: party.customer.id }) })
+      setOrder(response.order)
+      onChanged()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not attach the customer')
+    }
+  }
+
   async function requestCancellation() {
     if (!order) return
     const reason = cancelReason.trim()
@@ -160,7 +193,12 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
             <p className="mt-6 text-sm text-muted-foreground">This order could not be found.</p>
           ) : (
             <>
-              {order.customer && <p className="mt-4 text-sm"><span className="text-muted-foreground">Customer:</span> {order.customer.firstName} {order.customer.lastName ?? ''}</p>}
+              {order.customer && (
+                <p className="mt-4 text-sm">
+                  <span className="text-muted-foreground">Customer:</span> {order.customer.firstName} {order.customer.lastName ?? ''}
+                  {Number(order.customer.balance ?? 0) > 0 && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-semibold text-warning">Owes {formatKes(order.customer.balance ?? 0)}</span>}
+                </p>
+              )}
               {order.reservation && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-sm bg-secondary/10 px-2 py-1 text-xs font-semibold text-secondary">
                   Rung up to bill Room {order.reservation.room.number}
@@ -191,7 +229,14 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 )}
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-semibold">{formatKes(order.total)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="font-semibold text-success">{formatKes(order.paid)}</span></div>
-                <div className="flex justify-between border-t pt-1 text-base"><span className="font-semibold">Balance due</span><span className="font-bold">{formatKes(remaining)}</span></div>
+                <div className="flex justify-between border-t pt-1 text-base">
+                  <span className="font-semibold">Balance due</span>
+                  <span className="flex items-center gap-2">
+                    {order.paymentStatus === 'PARTIAL' && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase text-warning">Part-paid</span>}
+                    {order.paymentStatus === 'UNPAID' && remaining > 0 && order.status === 'COMPLETED' && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase text-destructive">On credit</span>}
+                    <span className="font-bold">{formatKes(remaining)}</span>
+                  </span>
+                </div>
               </div>
 
               {order.payments.length > 0 && (
@@ -233,7 +278,7 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 )
               )}
 
-              {order.status === 'SERVED' && remaining > 0 && (
+              {(order.status === 'SERVED' || order.status === 'COMPLETED') && remaining > 0.01 && (
                 <form onSubmit={settle} className="mt-5 space-y-3 border-t pt-5">
                   <div className="flex gap-1 rounded-sm bg-muted/50 p-1">
                     {(['PAY', 'ROOM'] as const).map((value) => (
@@ -298,12 +343,46 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 </form>
               )}
 
+              {order.status === 'SERVED' && (
+                <div className="mt-3 space-y-2">
+                  {remaining > 0.01 && !order.customer && (
+                    <button
+                      type="button"
+                      onClick={() => setCustModalOpen(true)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-sm border py-2 text-xs font-semibold hover:bg-muted"
+                    >
+                      <LuUserPlus className="size-3.5" /> Add a customer to complete on credit
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={settling || (remaining > 0.01 && !order.customer)}
+                    onClick={() => void completeOrder()}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-sm bg-secondary py-2.5 text-sm font-semibold text-secondary-foreground disabled:opacity-50"
+                  >
+                    {settling && <LuLoaderCircle className="animate-spin" />}
+                    {remaining > 0.01 ? `Complete on credit · ${formatKes(remaining)} owing` : 'Complete order'}
+                  </button>
+                </div>
+              )}
+
               {order.status === 'READY' && <p className="mt-5 text-sm text-warning">Waiting for the waiter to mark this order served before payment can be taken.</p>}
-              {order.status === 'COMPLETED' && <p className="mt-5 text-sm font-semibold text-success">Paid in full.</p>}
+              {order.status === 'COMPLETED' && remaining <= 0.01 && <p className="mt-5 text-sm font-semibold text-success">Paid in full.</p>}
+              {order.status === 'COMPLETED' && remaining > 0.01 && (
+                <p className="mt-5 text-sm font-semibold text-warning">Completed with {formatKes(remaining)} on the customer's balance.</p>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {custModalOpen && (
+        <CustomerSelectModal
+          party={order?.customer ? { kind: 'CUSTOMER', customer: { id: order.customer.id, firstName: order.customer.firstName, lastName: order.customer.lastName, phone: '' } } : { kind: 'WALK_IN' }}
+          onChange={(p) => void attachCustomer(p)}
+          onClose={() => setCustModalOpen(false)}
+        />
+      )}
 
       {showReceipt && order && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReceipt(false) }}>
