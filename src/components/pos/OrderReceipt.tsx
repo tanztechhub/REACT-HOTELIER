@@ -3,6 +3,7 @@ export type ReceiptOrderItem = {
   quantity: number
   unitPrice: string
   menuItem: { name: string }
+  variant: { name: string } | null
   addons: { id: string; quantity: number; unitPrice: string; addon: { name: string } }[]
 }
 export type ReceiptPayment = { id: string; paymentMethod: { name: string }; amount: string; reference: string | null; createdAt: string }
@@ -47,7 +48,7 @@ export default function OrderReceipt({ order, profile }: { order: ReceiptOrder; 
         {order.items.map((item) => (
           <div key={item.id}>
             <div className="flex justify-between">
-              <span>{item.quantity} × {item.menuItem.name}</span>
+              <span>{item.quantity} × {item.menuItem.name}{item.variant ? ` (${item.variant.name})` : ''}</span>
               <span>{formatKes(Number(item.unitPrice) * item.quantity)}</span>
             </div>
             {item.addons.map((a) => (

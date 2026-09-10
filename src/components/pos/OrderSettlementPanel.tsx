@@ -158,7 +158,7 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 {order.items.map((item) => (
                   <div key={item.id} className="rounded-sm bg-muted/50 p-3 text-sm">
                     <div className="flex justify-between font-medium">
-                      <span>{item.quantity}&times; {item.menuItem.name}</span>
+                      <span>{item.quantity}&times; {item.menuItem.name}{item.variant ? ` (${item.variant.name})` : ''}</span>
                       <span>{formatKes(Number(item.unitPrice) * item.quantity)}</span>
                     </div>
                     {item.addons.length > 0 && <p className="mt-1 text-xs text-muted-foreground">+ {item.addons.map((a) => a.addon.name).join(', ')}</p>}
