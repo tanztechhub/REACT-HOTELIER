@@ -14,10 +14,24 @@ const ACCEPTED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif
 const businessTypes = ['RESTAURANT', 'CAFE', 'HOTEL', 'MOTEL'] as const
 const currencies = ['KES', 'UGX', 'TZS', 'USD'] as const
 const taxModes = ['INCLUSIVE', 'EXCLUSIVE'] as const
+const taxTreatments = ['STANDARD', 'ZERO_RATED', 'EXEMPT'] as const
 
 type BusinessType = (typeof businessTypes)[number]
 type Currency = (typeof currencies)[number]
 type TaxMode = (typeof taxModes)[number]
+type TaxTreatment = (typeof taxTreatments)[number]
+
+// The four choices a user picks from collapse a treatment + mode pair into
+// one control. Rate is a separate number field.
+const taxCategoryOptions = [
+  { key: 'STANDARD_INCLUSIVE', label: 'Standard rate — prices already include tax', treatment: 'STANDARD', mode: 'INCLUSIVE' },
+  { key: 'STANDARD_EXCLUSIVE', label: 'Standard rate — tax added at checkout', treatment: 'STANDARD', mode: 'EXCLUSIVE' },
+  { key: 'ZERO_RATED', label: 'Zero-rated (taxable at 0%)', treatment: 'ZERO_RATED', mode: 'INCLUSIVE' },
+  { key: 'EXEMPT', label: 'Exempt (outside VAT)', treatment: 'EXEMPT', mode: 'INCLUSIVE' },
+] as const
+type TaxCategoryKey = (typeof taxCategoryOptions)[number]['key']
+const taxCategoryKey = (treatment: TaxTreatment, mode: TaxMode): TaxCategoryKey =>
+  treatment === 'STANDARD' ? (mode === 'EXCLUSIVE' ? 'STANDARD_EXCLUSIVE' : 'STANDARD_INCLUSIVE') : treatment
 
 const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase()
 const currencyLabels: Record<Currency, string> = {
@@ -26,11 +40,6 @@ const currencyLabels: Record<Currency, string> = {
   TZS: 'TZS — Tanzanian Shilling',
   USD: 'USD — US Dollar',
 }
-const taxModeLabels: Record<TaxMode, string> = {
-  EXCLUSIVE: 'Exclusive — tax added at checkout',
-  INCLUSIVE: 'Inclusive — prices already include tax',
-}
-
 type BusinessProfile = {
   logoUrl: string | null
   shortName: string | null
@@ -41,6 +50,7 @@ type BusinessProfile = {
   kraPin: string | null
   taxRate: string | null
   taxMode: TaxMode
+  taxTreatment: TaxTreatment
   primaryPhone: string | null
   alternativePhone: string | null
   email: string | null
@@ -63,6 +73,7 @@ type ProfileForm = {
   kraPin: string
   taxRate: string
   taxMode: TaxMode
+  taxTreatment: TaxTreatment
   primaryPhone: string
   alternativePhone: string
   email: string
@@ -79,7 +90,7 @@ type ProfileForm = {
 const emptyForm: ProfileForm = {
   shortName: '',
   businessName: '', businessType: '', currency: '', registrationNumber: '', kraPin: '',
-  taxRate: '16', taxMode: 'INCLUSIVE',
+  taxRate: '16', taxMode: 'INCLUSIVE', taxTreatment: 'STANDARD',
   primaryPhone: '', alternativePhone: '', email: '', website: '',
   country: '', county: '', city: '', address: '',
   ownerName: '', ownerPhone: '', ownerEmail: '',
@@ -95,6 +106,7 @@ function formFromProfile(profile: BusinessProfile): ProfileForm {
     kraPin: profile.kraPin ?? '',
     taxRate: profile.taxRate ?? '16',
     taxMode: profile.taxMode,
+    taxTreatment: profile.taxTreatment ?? 'STANDARD',
     primaryPhone: profile.primaryPhone ?? '',
     alternativePhone: profile.alternativePhone ?? '',
     email: profile.email ?? '',
@@ -273,14 +285,29 @@ export default function BusinessInformation() {
             </Field>
           </Section>
 
-          <Section title="Tax Settings">
-            <Field label="Tax Rate %">
-              <input type="number" min="0" max="100" step="0.1" className="input" value={form.taxRate} onChange={(e) => set('taxRate', e.target.value)} />
-            </Field>
-            <Field label="Tax Mode">
-              <select className="input" value={form.taxMode} onChange={(e) => set('taxMode', e.target.value as TaxMode)}>
-                {taxModes.map((m) => <option key={m} value={m}>{taxModeLabels[m]}</option>)}
+          <Section title="Tax Settings" description="The default every new menu item inherits. Individual items can override it.">
+            <Field label="Default Tax Category" className="sm:col-span-2">
+              <select
+                className="input"
+                value={taxCategoryKey(form.taxTreatment, form.taxMode)}
+                onChange={(e) => {
+                  const opt = taxCategoryOptions.find((o) => o.key === e.target.value)!
+                  setForm((f) => ({ ...f, taxTreatment: opt.treatment, taxMode: opt.mode }))
+                }}
+              >
+                {taxCategoryOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
               </select>
+            </Field>
+            <Field label="Standard Tax Rate %">
+              <input
+                type="number" min="0" max="100" step="0.1" className="input"
+                value={form.taxRate}
+                disabled={form.taxTreatment !== 'STANDARD'}
+                onChange={(e) => set('taxRate', e.target.value)}
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {form.taxTreatment === 'STANDARD' ? 'Applied to standard-rated sales (e.g. 16% VAT).' : 'Only used when the category is Standard rate.'}
+              </span>
             </Field>
           </Section>
 

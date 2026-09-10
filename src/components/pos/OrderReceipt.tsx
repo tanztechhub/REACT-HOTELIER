@@ -7,7 +7,19 @@ export type ReceiptOrderItem = {
   addons: { id: string; quantity: number; unitPrice: string; addon: { name: string } }[]
 }
 export type ReceiptPayment = { id: string; paymentMethod: { name: string }; amount: string; reference: string | null; createdAt: string }
-export type ReceiptFinancials = { subtotal: number; discount: number; taxRate: number; taxMode: string; taxAmount: number; total: number }
+export type ReceiptTaxLine = { key: string; label: string; net: number; tax: number; gross: number }
+export type ReceiptFinancials = {
+  subtotal: number
+  discount: number
+  taxRate: number
+  taxMode: string
+  taxAmount: number
+  net: number
+  total: number
+  taxLines?: ReceiptTaxLine[]
+  zeroRatedAmount?: number
+  exemptAmount?: number
+}
 export type ReceiptOrder = {
   id: string
   orderNumber: number
@@ -66,8 +78,35 @@ export default function OrderReceipt({ order, profile }: { order: ReceiptOrder; 
       <div className="space-y-1">
         <div className="flex justify-between"><span>Subtotal</span><span>{formatKes(order.financials.subtotal)}</span></div>
         {order.financials.discount > 0 && <div className="flex justify-between"><span>Discount</span><span>-{formatKes(order.financials.discount)}</span></div>}
-        {order.financials.taxRate > 0 && <div className="flex justify-between"><span>Tax ({order.financials.taxRate}% {order.financials.taxMode === 'EXCLUSIVE' ? 'excl.' : 'incl.'})</span><span>{formatKes(order.financials.taxAmount)}</span></div>}
+        <div className="flex justify-between"><span>Net</span><span>{formatKes(order.financials.net)}</span></div>
+        {(order.financials.taxLines ?? []).map((t) => (
+          <div key={t.key} className="flex justify-between"><span>{t.label}</span><span>{formatKes(t.tax)}</span></div>
+        ))}
+        {(order.financials.taxLines ?? []).length === 0 && order.financials.taxAmount > 0 && (
+          <div className="flex justify-between"><span>Tax</span><span>{formatKes(order.financials.taxAmount)}</span></div>
+        )}
         <div className="flex justify-between border-t border-gray-300 pt-1 text-sm font-bold"><span>Total</span><span>{formatKes(order.financials.total)}</span></div>
+      </div>
+
+      <div className="my-3 border-t border-dashed border-gray-400" />
+
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Tax breakdown</p>
+        <div className="flex justify-between text-[11px] font-semibold text-gray-500">
+          <span>Rate</span><span className="flex gap-3"><span className="w-16 text-right">Net</span><span className="w-14 text-right">Tax</span><span className="w-16 text-right">Gross</span></span>
+        </div>
+        {(order.financials.taxLines ?? []).map((t) => (
+          <div key={t.key} className="flex justify-between text-xs">
+            <span>{t.label}</span>
+            <span className="flex gap-3"><span className="w-16 text-right">{formatKes(t.net)}</span><span className="w-14 text-right">{formatKes(t.tax)}</span><span className="w-16 text-right">{formatKes(t.gross)}</span></span>
+          </div>
+        ))}
+        <div className="flex justify-between border-t border-gray-300 pt-1 text-xs font-bold">
+          <span>Total</span>
+          <span className="flex gap-3"><span className="w-16 text-right">{formatKes(order.financials.net)}</span><span className="w-14 text-right">{formatKes(order.financials.taxAmount)}</span><span className="w-16 text-right">{formatKes(order.financials.total)}</span></span>
+        </div>
+        {(order.financials.zeroRatedAmount ?? 0) > 0 && <p className="text-[10px] text-gray-500">Includes zero-rated: {formatKes(order.financials.zeroRatedAmount!)}</p>}
+        {(order.financials.exemptAmount ?? 0) > 0 && <p className="text-[10px] text-gray-500">Includes exempt: {formatKes(order.financials.exemptAmount!)}</p>}
       </div>
 
       <div className="my-3 border-t border-dashed border-gray-400" />

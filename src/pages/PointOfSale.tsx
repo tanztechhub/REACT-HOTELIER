@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
+  LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
   LuPause, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
@@ -23,6 +23,8 @@ type ApiAddonGroup = {
   required: boolean
   addons: ApiAddon[]
 }
+type TaxMode = 'INCLUSIVE' | 'EXCLUSIVE'
+type TaxTreatment = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT'
 type ApiMenuItem = {
   id: string
   name: string
@@ -33,11 +35,15 @@ type ApiMenuItem = {
   addons: ApiAddon[]
   variants: ApiVariant[]
   addonGroups: ApiAddonGroup[]
+  taxRate: string | number | null
+  taxMode: TaxMode | null
+  taxTreatment: TaxTreatment | null
 }
 type RestaurantTable = { id: string; label: string; area: string | null; status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'OUT_OF_SERVICE' }
 type Location = { id: string; name: string; type: string | null; isActive: boolean; servesDirectly: boolean }
-type BusinessProfile = { businessName: string; taxRate: string | null; taxMode: 'INCLUSIVE' | 'EXCLUSIVE' }
+type BusinessProfile = { businessName: string; taxRate: string | null; taxMode: TaxMode }
 
+type LineTax = { rate: number; mode: TaxMode; treatment: TaxTreatment }
 type Addon = { id: string; name: string; price: number }
 type Variant = { id: string; name: string; price: number }
 type AddonGroup = {
@@ -60,6 +66,7 @@ type MenuItem = {
   variants: Variant[]
   addonGroups: AddonGroup[]
   legacyAddons: Addon[]
+  tax: LineTax
 }
 // One configured line in the sale: an item, the chosen variant (size/option)
 // if any, and the flattened set of chosen add-ons. Keyed by a generated id so
@@ -90,8 +97,18 @@ function normalizeMenuItem(raw: ApiMenuItem): MenuItem {
       addons: g.addons.map((a) => ({ id: a.id, name: a.name, price: toNumber(a.price) })),
     })),
     legacyAddons: raw.addons.filter((a) => a.isActive !== false).map((a) => ({ id: a.id, name: a.name, price: toNumber(a.price) })),
+    tax: {
+      rate: raw.taxRate != null ? toNumber(raw.taxRate) : 0,
+      mode: raw.taxMode ?? 'INCLUSIVE',
+      treatment: raw.taxTreatment ?? 'STANDARD',
+    },
   }
 }
+
+const taxLabel = (t: LineTax) =>
+  t.treatment === 'EXEMPT' ? 'Exempt'
+    : t.treatment === 'ZERO_RATED' || t.rate <= 0 ? 'Zero-rated (0%)'
+    : `VAT ${t.rate}%${t.mode === 'INCLUSIVE' ? ' (incl)' : ''}`
 
 /** Whether an item needs the options step before it can go on the cart — it
  * has sizes to pick, add-on groups to satisfy, or legacy add-ons to offer. */
@@ -118,19 +135,47 @@ function groupHint(group: AddonGroup) {
   return `Choose ${min}–${max}`
 }
 
-function computeFinancials(cart: CartLine[], discountInput: string, profile: BusinessProfile | null) {
-  const subtotal = cart.reduce((sum, line) => sum + lineTotal(line), 0)
+const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
+
+type TaxBucket = { key: string; label: string; net: number; tax: number; gross: number }
+
+/** Live mirror of the server's computeOrderFinancials: tax is worked out per
+ * line from the line's own treatment/rate/mode (menu-item override else the
+ * property default, already resolved by the API), the order discount is
+ * apportioned by line value, and lines are bucketed for the receipt-style
+ * breakdown. Kept deliberately in step with lib/orderTotals.ts on the server. */
+function computeFinancials(cart: CartLine[], discountInput: string) {
+  const rows = cart.map((line) => ({ sub: lineTotal(line), tax: line.item.tax }))
+  const subtotal = rows.reduce((s, r) => s + r.sub, 0)
   const discount = Math.min(Number(discountInput) || 0, subtotal)
-  const taxable = subtotal - discount
-  const rate = profile?.taxRate ? Number(profile.taxRate) : 0
-  const taxMode = profile?.taxMode ?? 'INCLUSIVE'
+
+  const buckets = new Map<string, TaxBucket>()
+  let net = 0
   let taxAmount = 0
-  let total = taxable
-  if (rate > 0) {
-    if (taxMode === 'EXCLUSIVE') { taxAmount = taxable * (rate / 100); total = taxable + taxAmount }
-    else { taxAmount = taxable - taxable / (1 + rate / 100); total = taxable }
+  let total = 0
+
+  for (const { sub, tax } of rows) {
+    const share = subtotal > 0 ? sub - discount * (sub / subtotal) : 0
+    let lineNet: number
+    let lineTax: number
+    if (tax.treatment === 'EXEMPT' || tax.treatment === 'ZERO_RATED' || tax.rate <= 0) {
+      lineNet = share; lineTax = 0
+    } else if (tax.mode === 'EXCLUSIVE') {
+      lineNet = share; lineTax = lineNet * (tax.rate / 100)
+    } else {
+      lineNet = share / (1 + tax.rate / 100); lineTax = share - lineNet
+    }
+    const lineGross = lineNet + lineTax
+    net += lineNet; taxAmount += lineTax; total += lineGross
+
+    const label = taxLabel(tax)
+    const bucket = buckets.get(label) ?? { key: label, label, net: 0, tax: 0, gross: 0 }
+    bucket.net += lineNet; bucket.tax += lineTax; bucket.gross += lineGross
+    buckets.set(label, bucket)
   }
-  return { subtotal, discount, taxable, rate, taxMode, taxAmount, total }
+
+  const taxLines = [...buckets.values()].map((b) => ({ ...b, net: round2(b.net), tax: round2(b.tax), gross: round2(b.gross) }))
+  return { subtotal: round2(subtotal), discount: round2(discount), net: round2(net), taxAmount: round2(taxAmount), total: round2(total), taxLines }
 }
 
 export default function PointOfSale() {
@@ -241,7 +286,7 @@ export default function PointOfSale() {
   const categories = useMemo(() => ['All items', ...Array.from(new Set(menuItems.map((item) => item.category.name)))], [menuItems])
   const filteredCategories = categories.filter((c) => c.toLowerCase().includes(categoryQuery.trim().toLowerCase()))
   const visibleItems = menuItems.filter((item) => (activeCategory === 'All items' || item.category.name === activeCategory) && (!search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())))
-  const financials = useMemo(() => computeFinancials(cart, discount, profile), [cart, discount, profile])
+  const financials = useMemo(() => computeFinancials(cart, discount), [cart, discount])
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0)
   const instantServe = locations.find((l) => l.id === effectiveLocationId)?.servesDirectly === true
 
@@ -340,13 +385,17 @@ export default function PointOfSale() {
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
       <div className="relative">
+        <div className="pointer-events-none absolute -bottom-2 left-3 right-1 top-2 rotate-[0.6deg] rounded-sm border border-black/10 bg-white/70" aria-hidden="true" />
         <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-[#f2921a] shadow-lg" aria-hidden="true" />
-        <div className="relative flex flex-wrap items-center justify-between gap-3 rounded-sm bg-secondary px-5 py-3.5 shadow-sm">
+        <div
+          className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-5 py-4 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)]"
+          style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(2,6,23,0.055) 28px)' }}
+        >
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Checkout</p>
-            <h1 className="mt-1 font-display text-2xl font-semibold text-white">Point of Sale</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Checkout</p>
+            <h1 className="mt-1 font-display text-2xl font-semibold text-slate-900">Point of Sale</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-white/80">
+          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
             <span className="flex items-center gap-1.5"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
             <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
             {fixedLocation ? (
@@ -354,7 +403,7 @@ export default function PointOfSale() {
             ) : pickableLocations.length > 0 ? (
               <label className="flex items-center gap-1.5">
                 <LuMapPin className="size-3.5" />
-                <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
+                <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-slate-300 bg-white px-1.5 py-1 text-xs font-medium text-slate-700 outline-none">
                   <option value="">Select location…</option>
                   {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
@@ -377,9 +426,24 @@ export default function PointOfSale() {
         </div>
       )}
 
-      <div className="mt-6 flex w-fit gap-1 rounded-sm bg-muted/50 p-1">
-        {([['NEW', 'New Sale'], ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`]] as const).map(([value, label]) => (
-          <button key={value} onClick={() => setTab(value)} className={cn('rounded-sm px-4 py-2 text-sm font-semibold', tab === value ? 'bg-card text-secondary shadow-sm' : 'text-muted-foreground')}>{label}</button>
+      <div className="mt-6 flex w-fit flex-wrap gap-2.5">
+        {([
+          ['NEW', 'New Sale', <LuPlus key="i" className="size-4" />],
+          ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`, <LuClipboardList key="i" className="size-4" />],
+        ] as const).map(([value, label, icon]) => (
+          <button
+            key={value}
+            onClick={() => setTab(value)}
+            className={cn(
+              'inline-flex items-center gap-2.5 rounded-md py-2.5 pl-2.5 pr-4 text-sm font-semibold transition',
+              tab === value
+                ? 'bg-amber-400 text-amber-950 shadow-[0_1px_2px_rgba(2,6,23,0.08),0_10px_20px_-8px_rgba(2,6,23,0.35)]'
+                : 'bg-amber-400/15 text-amber-700 hover:bg-amber-400/25',
+            )}
+          >
+            <span className={cn('flex size-6 items-center justify-center rounded', tab === value ? 'bg-amber-950/10' : 'bg-amber-400/25')}>{icon}</span>
+            {label}
+          </button>
         ))}
       </div>
 
@@ -604,7 +668,10 @@ export default function PointOfSale() {
               <div className="space-y-1.5 border-t bg-muted/30 p-4 text-sm">
                 <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatKes(financials.subtotal)}</span></div>
                 {financials.discount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span>-{formatKes(financials.discount)}</span></div>}
-                {financials.rate > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({financials.rate}% {financials.taxMode === 'EXCLUSIVE' ? 'excl.' : 'incl.'})</span><span>{formatKes(financials.taxAmount)}</span></div>}
+                <div className="flex justify-between text-muted-foreground"><span>Net</span><span>{formatKes(financials.net)}</span></div>
+                {financials.taxLines.map((t) => (
+                  <div key={t.key} className="flex justify-between text-muted-foreground"><span>{t.label}</span><span>{formatKes(t.tax)}</span></div>
+                ))}
                 <div className="flex justify-between border-t pt-1.5 text-base font-bold text-foreground"><span>Total</span><span>{formatKes(financials.total)}</span></div>
               </div>
 

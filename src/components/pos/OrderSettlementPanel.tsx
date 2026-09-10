@@ -169,7 +169,13 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
               <div className="mt-4 space-y-1 border-t pt-4 text-sm">
                 <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatKes(order.financials.subtotal)}</span></div>
                 {order.financials.discount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span>-{formatKes(order.financials.discount)}</span></div>}
-                {order.financials.taxRate > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({order.financials.taxRate}%)</span><span>{formatKes(order.financials.taxAmount)}</span></div>}
+                <div className="flex justify-between text-muted-foreground"><span>Net</span><span>{formatKes(order.financials.net)}</span></div>
+                {(order.financials.taxLines ?? []).map((t) => (
+                  <div key={t.key} className="flex justify-between text-muted-foreground"><span>{t.label}</span><span>{formatKes(t.tax)}</span></div>
+                ))}
+                {(order.financials.taxLines ?? []).length === 0 && order.financials.taxAmount > 0 && (
+                  <div className="flex justify-between text-muted-foreground"><span>Tax</span><span>{formatKes(order.financials.taxAmount)}</span></div>
+                )}
                 <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-semibold">{formatKes(order.total)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="font-semibold text-success">{formatKes(order.paid)}</span></div>
                 <div className="flex justify-between border-t pt-1 text-base"><span className="font-semibold">Balance due</span><span className="font-bold">{formatKes(remaining)}</span></div>

@@ -19,6 +19,7 @@ import {
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import StatCard from '@/components/ui/StatCard'
 
 const TEMPERATURES = ['OTHER', 'HOT', 'COLD'] as const
 type Temperature = (typeof TEMPERATURES)[number]
@@ -35,6 +36,8 @@ type MenuItem = {
   sku: string | null
   price: string
   taxRate: string | null
+  taxMode: 'INCLUSIVE' | 'EXCLUSIVE' | null
+  taxTreatment: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' | null
   photoUrl: string | null
   temperature: Temperature
   isVegetarian: boolean
@@ -82,6 +85,38 @@ type Variant = {
   sortOrder: number
 }
 
+const TAX_CHOICES = [
+  { key: 'INHERIT', label: 'Business default' },
+  { key: 'STANDARD_INCLUSIVE', label: 'Standard — price already includes tax' },
+  { key: 'STANDARD_EXCLUSIVE', label: 'Standard — tax added on top' },
+  { key: 'ZERO_RATED', label: 'Zero-rated (taxable at 0%)' },
+  { key: 'EXEMPT', label: 'Exempt (outside VAT)' },
+] as const
+type TaxChoice = (typeof TAX_CHOICES)[number]['key']
+type BizTax = { taxRate: string | null; taxMode: 'INCLUSIVE' | 'EXCLUSIVE'; taxTreatment: 'STANDARD' | 'ZERO_RATED' | 'EXEMPT' }
+
+function taxChoiceOf(item: Pick<MenuItem, 'taxTreatment' | 'taxMode'>): TaxChoice {
+  if (!item.taxTreatment) return 'INHERIT'
+  if (item.taxTreatment === 'STANDARD') return item.taxMode === 'EXCLUSIVE' ? 'STANDARD_EXCLUSIVE' : 'STANDARD_INCLUSIVE'
+  return item.taxTreatment
+}
+function taxPayload(choice: TaxChoice, rate: string) {
+  const r = rate.trim() === '' ? null : Number(rate)
+  switch (choice) {
+    case 'STANDARD_INCLUSIVE': return { taxTreatment: 'STANDARD', taxMode: 'INCLUSIVE', taxRate: r }
+    case 'STANDARD_EXCLUSIVE': return { taxTreatment: 'STANDARD', taxMode: 'EXCLUSIVE', taxRate: r }
+    case 'ZERO_RATED': return { taxTreatment: 'ZERO_RATED', taxMode: null, taxRate: null }
+    case 'EXEMPT': return { taxTreatment: 'EXEMPT', taxMode: null, taxRate: null }
+    default: return { taxTreatment: null, taxMode: null, taxRate: null }
+  }
+}
+function describeBizTax(biz: BizTax | null): string {
+  if (!biz) return 'the property setting'
+  if (biz.taxTreatment === 'ZERO_RATED') return 'Zero-rated (0%)'
+  if (biz.taxTreatment === 'EXEMPT') return 'Exempt'
+  return `${Number(biz.taxRate ?? 16)}% ${biz.taxMode === 'EXCLUSIVE' ? 'added on top' : 'included'}`
+}
+
 type Form = {
   name: string
   shortName: string
@@ -89,6 +124,7 @@ type Form = {
   description: string
   sku: string
   price: string
+  taxChoice: TaxChoice
   taxRate: string
   photoUrl: string
   temperature: Temperature
@@ -97,7 +133,7 @@ type Form = {
   isAvailable: boolean
 }
 const emptyForm: Form = {
-  name: '', shortName: '', menuCategoryId: '', description: '', sku: '', price: '', taxRate: '',
+  name: '', shortName: '', menuCategoryId: '', description: '', sku: '', price: '', taxChoice: 'INHERIT', taxRate: '',
   photoUrl: '', temperature: 'OTHER', isVegetarian: false, isActive: true, isAvailable: true,
 }
 
@@ -119,6 +155,7 @@ export default function MenuItems() {
   const [busy, setBusy] = useState(false)
   const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
   const [groupsFor, setGroupsFor] = useState<MenuItem | null>(null)
+  const [bizTax, setBizTax] = useState<BizTax | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -144,6 +181,7 @@ export default function MenuItems() {
   useEffect(() => { const t = window.setTimeout(() => void load(), 200); return () => window.clearTimeout(t) }, [load])
   useEffect(() => {
     api<{ categories: Category[] }>('/menu-categories').then((r) => setCategories(r.categories)).catch(() => {})
+    api<{ profile: BizTax | null }>('/business-profile').then((r) => setBizTax(r.profile)).catch(() => {})
   }, [])
 
   const summary = useMemo(() => ({
@@ -169,6 +207,7 @@ export default function MenuItems() {
       description: item.description ?? '',
       sku: item.sku ?? '',
       price: String(Number(item.price)),
+      taxChoice: taxChoiceOf(item),
       taxRate: item.taxRate != null ? String(Number(item.taxRate)) : '',
       photoUrl: item.photoUrl ?? '',
       temperature: item.temperature,
@@ -191,7 +230,7 @@ export default function MenuItems() {
         description: form.description.trim() || undefined,
         sku: form.sku.trim() || undefined,
         price: Number(form.price),
-        taxRate: form.taxRate.trim() === '' ? undefined : Number(form.taxRate),
+        ...taxPayload(form.taxChoice, form.taxRate),
         photoUrl: form.photoUrl.trim() || undefined,
         temperature: form.temperature,
         isVegetarian: form.isVegetarian,
@@ -269,11 +308,12 @@ export default function MenuItems() {
       )}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-3">
-        {([['Items', summary.total], ['Unavailable', summary.unavailable], ['Inactive', summary.inactive]] as const).map(([label, value]) => (
-          <div key={label} className="rounded-sm border bg-card p-5 shadow-sm">
-            <span className="text-sm font-medium text-muted-foreground">{label}</span>
-            <p className="mt-2 font-display text-2xl font-semibold">{value}</p>
-          </div>
+        {([
+          ['Items', summary.total, <LuListChecks key="i" />],
+          ['Unavailable', summary.unavailable, <LuEyeOff key="i" />],
+          ['Inactive', summary.inactive, <LuPower key="i" />],
+        ] as const).map(([label, value, icon], i) => (
+          <StatCard key={label} index={i} label={label} value={value} icon={icon} />
         ))}
       </section>
 
@@ -354,7 +394,11 @@ export default function MenuItems() {
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
                       {item._count.variants > 0 ? <span className="text-xs font-normal text-muted-foreground">from </span> : null}
                       {money(item.price)}
-                      {item.taxRate != null && <span className="ml-1 text-xs text-muted-foreground">+{Number(item.taxRate)}%</span>}
+                      {item.taxTreatment === 'ZERO_RATED' && <span className="ml-1 text-xs text-muted-foreground">0-rated</span>}
+                      {item.taxTreatment === 'EXEMPT' && <span className="ml-1 text-xs text-muted-foreground">exempt</span>}
+                      {item.taxTreatment === 'STANDARD' && item.taxRate != null && (
+                        <span className="ml-1 text-xs text-muted-foreground">{Number(item.taxRate)}%{item.taxMode === 'EXCLUSIVE' ? ' +tax' : ' incl'}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <button
@@ -444,8 +488,24 @@ export default function MenuItems() {
 
             <FieldGroup title="Pricing">
               <Field label="Price (KSh)" required><input required type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="input" /></Field>
-              <Field label="Tax rate (%)"><input type="number" min="0" max="100" step="0.01" placeholder="Leave blank for the property default" value={form.taxRate} onChange={(e) => setForm({ ...form, taxRate: e.target.value })} className="input" /></Field>
               <Field label="SKU"><input placeholder="Optional — unique" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input" /></Field>
+              <Field label="Tax treatment">
+                <select className="input" value={form.taxChoice} onChange={(e) => setForm({ ...form, taxChoice: e.target.value as TaxChoice })}>
+                  {TAX_CHOICES.map((c) => (
+                    <option key={c.key} value={c.key}>{c.key === 'INHERIT' ? `Business default (${describeBizTax(bizTax)})` : c.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Tax rate (%)">
+                <input
+                  type="number" min="0" max="100" step="0.01"
+                  placeholder={form.taxChoice.startsWith('STANDARD') ? `Blank = ${Number(bizTax?.taxRate ?? 16)}% (property default)` : 'Not used for this treatment'}
+                  value={form.taxChoice.startsWith('STANDARD') ? form.taxRate : ''}
+                  disabled={!form.taxChoice.startsWith('STANDARD')}
+                  onChange={(e) => setForm({ ...form, taxRate: e.target.value })}
+                  className="input"
+                />
+              </Field>
               <Field label="Drink type">
                 <select className="input" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value as Temperature })}>
                   {TEMPERATURES.map((t) => <option key={t} value={t}>{tempLabel[t]}</option>)}
