@@ -23,6 +23,7 @@ import Recipes from "@/pages/Recipes";
 import MenuAndAddons from "@/pages/MenuAndAddons";
 import MenuCategories from "@/pages/MenuCategories";
 import MenuItems from "@/pages/MenuItems";
+import AddonGroups from "@/pages/AddonGroups";
 import Tables from "@/pages/Tables";
 import Reports from "@/pages/Reports";
 import Receipts from "@/pages/Receipts";
@@ -184,6 +185,7 @@ function App() {
         <Route path="/kitchen/menu-addons" element={<MenuAndAddons />} />
         <Route path="/menu/categories" element={<MenuCategories />} />
         <Route path="/menu/items" element={<MenuItems />} />
+        <Route path="/menu/addon-groups" element={<AddonGroups />} />
         <Route path="/sales/tables" element={<Tables />} />
         <Route path="/sales/receipts" element={<Receipts />} />
         <Route path="/reports" element={<Reports />} />
