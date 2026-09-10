@@ -131,6 +131,9 @@ export default function MenuItems() {
   const [editing, setEditing] = useState<MenuItem | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  // Variants staged in the create form — POSTed after the item is created.
+  const [newVariants, setNewVariants] = useState<{ name: string; price: string; sku: string }[]>([])
+  const [variantDraft, setVariantDraft] = useState({ name: '', price: '', sku: '' })
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
@@ -173,9 +176,21 @@ export default function MenuItems() {
 
   const canReorder = !!categoryFilter && !search.trim() && statusFilter === 'all'
 
+  function resetVariantStaging() {
+    setNewVariants([])
+    setVariantDraft({ name: '', price: '', sku: '' })
+  }
+
+  function addStagedVariant() {
+    if (!variantDraft.name.trim() || variantDraft.price === '') return
+    setNewVariants((v) => [...v, { name: variantDraft.name.trim(), price: variantDraft.price, sku: variantDraft.sku.trim() }])
+    setVariantDraft({ name: '', price: '', sku: '' })
+  }
+
   function openCreate() {
     setEditing(null)
     setShowCategoryModal(false)
+    resetVariantStaging()
     setForm({ ...emptyForm, menuCategoryId: categoryFilter || categories.find((c) => c.isActive)?.id || '' })
     setShowForm(true)
   }
@@ -183,6 +198,7 @@ export default function MenuItems() {
   function openEdit(item: MenuItem) {
     setEditing(item)
     setShowCategoryModal(false)
+    resetVariantStaging()
     setForm({
       name: item.name,
       shortName: item.shortName ?? '',
@@ -227,7 +243,18 @@ export default function MenuItems() {
         isAvailable: form.isAvailable,
         locationIds: form.locationIds,
       }
-      await api(editing ? `/menu-items/${editing.id}` : '/menu-items', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
+      if (editing) {
+        await api(`/menu-items/${editing.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+      } else {
+        const { item } = await api<{ item: { id: string } }>('/menu-items', { method: 'POST', body: JSON.stringify(payload) })
+        if (newVariants.length > 0) {
+          const results = await Promise.allSettled(newVariants.map((v) =>
+            api(`/menu-items/${item.id}/variants`, { method: 'POST', body: JSON.stringify({ name: v.name, price: Number(v.price), sku: v.sku || undefined }) }),
+          ))
+          const failed = results.filter((r) => r.status === 'rejected').length
+          if (failed > 0) toast.error(`Item saved, but ${failed} variant${failed === 1 ? '' : 's'} could not be added — add them from the item's row.`)
+        }
+      }
       toast.success(editing ? 'Menu item updated.' : 'Menu item created.')
       setShowForm(false)
       await load()
@@ -541,6 +568,53 @@ export default function MenuItems() {
                 )}
               </div>
             </FieldGroup>
+
+            {!editing && (
+              <div className="mt-6 border-t pt-5">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Variants (sizes / options)</p>
+                <p className="mb-3 mt-1 text-xs text-muted-foreground">Optional — Small / Medium / Large, each with its own price. You can also add or edit these later from the item's row.</p>
+
+                {newVariants.length > 0 && (
+                  <div className="mb-3 space-y-1.5">
+                    {newVariants.map((v, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 rounded-sm border bg-muted/40 px-3 py-2 text-sm">
+                        <span className="min-w-0 truncate font-medium">{v.name}</span>
+                        <span className="flex shrink-0 items-center gap-3">
+                          <span className="tabular-nums">{money(v.price || 0)}</span>
+                          {v.sku && <span className="text-xs text-muted-foreground">{v.sku}</span>}
+                          <button type="button" onClick={() => setNewVariants((cur) => cur.filter((_, x) => x !== i))} title="Remove" className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+                  <label className="text-xs font-medium">Name
+                    <input
+                      value={variantDraft.name}
+                      onChange={(e) => setVariantDraft({ ...variantDraft, name: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
+                      placeholder="Large"
+                      className="input mt-1"
+                    />
+                  </label>
+                  <label className="text-xs font-medium">Price
+                    <input
+                      type="number" min="0" step="0.01"
+                      value={variantDraft.price}
+                      onChange={(e) => setVariantDraft({ ...variantDraft, price: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
+                      className="input mt-1"
+                    />
+                  </label>
+                  <label className="text-xs font-medium">SKU
+                    <input value={variantDraft.sku} onChange={(e) => setVariantDraft({ ...variantDraft, sku: e.target.value })} placeholder="opt." className="input mt-1" />
+                  </label>
+                  <button type="button" onClick={addStagedVariant} disabled={!variantDraft.name.trim() || variantDraft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-6 border-t pt-5">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Menu flags</p>
