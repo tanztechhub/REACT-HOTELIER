@@ -133,6 +133,7 @@ export const navigation: NavGroup[] = [
       { label: 'Menu Categories', href: '/menu/categories', icon: LuLayoutGrid },
       { label: 'Menu Items', href: '/menu/items', icon: LuUtensils },
       { label: 'Add-on Groups', href: '/menu/addon-groups', icon: LuLayers },
+      { label: 'Add-ons', href: '/menu/addons', icon: LuPackage },
       { label: 'Recipes', href: '/kitchen/recipes', icon: LuChefHat },
       { label: 'Daily Expenses', href: '/kitchen/daily-expenses', icon: LuReceipt },
     ],
