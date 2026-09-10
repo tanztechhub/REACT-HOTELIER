@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuReceiptText, LuX } from 'react-icons/lu'
+import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuReceiptText, LuUserPlus, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import CustomerSelectModal, { type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from './OrderReceipt'
 
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type CheckedInStay = { id: string; reservationNo: string; customer: { firstName: string; lastName: string | null }; room: { number: string } }
 type Order = ReceiptOrder & {
+  id: string
   notes: string | null
   total: number
   paid: number
-  customer: { firstName: string; lastName: string | null } | null
+  paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID'
+  customer: { id: string; firstName: string; lastName: string | null; balance?: string | number | null } | null
   // Present when the tab was rung up "bill to Room X" — settlement then
   // defaults to charging that folio (staff can still switch to cash).
   reservation: CheckedInStay | null
@@ -48,6 +51,8 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [settling, setSettling] = useState(false)
+  const [custModalOpen, setCustModalOpen] = useState(false)
 
   const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId)
   const selectedStay = stays.find((s) => s.id === reservationId)

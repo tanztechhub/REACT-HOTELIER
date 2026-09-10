@@ -4,6 +4,7 @@ import {
   LuPause, LuPencil, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import { useToast } from '@/components/ui/Toast'
 import { useAppSelector } from '@/store/hooks'
 import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { cn } from '@/lib/utils'
@@ -63,7 +64,7 @@ type MenuItem = {
 type CartLine = { key: string; item: MenuItem; variant: Variant | null; addons: Addon[]; quantity: number }
 type CreatedOrder = { id: string; orderNumber: number }
 type ReadyNotification = { type: 'ORDER_READY'; message: string; order: { id: string; orderNumber: number; table: { label: string } | null } }
-type HeldSale = { key: string; label: string; tableId: string; discount: string; notes: string; cart: CartLine[] }
+type HeldSale = { key: string; heldNo: number; label: string; tableId: string; discount: string; notes: string; party: SaleParty; cart: CartLine[] }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type ActiveOrder = { id: string; orderNumber: number; status: string; total: number; customer: { firstName: string; lastName: string | null } | null; table: { label: string } | null }
 type CancelledOrder = ActiveOrder & {
@@ -161,6 +162,7 @@ function computeFinancials(cart: CartLine[], discountInput: string) {
 }
 
 export default function PointOfSale() {
+  const toast = useToast()
   const user = useAppSelector((s) => s.auth.user)
   const [tab, setTab] = useState<'NEW' | 'ACTIVE' | 'CANCELLED'>('NEW')
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
@@ -186,8 +188,12 @@ export default function PointOfSale() {
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
   const [discount, setDiscount] = useState('0')
   const [heldSales, setHeldSales] = useState<HeldSale[]>([])
+  const holdSeq = useRef(0)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  // Success flash on the Send/Serve button after an order goes through.
+  const [sentPulse, setSentPulse] = useState(false)
+  const sentTimer = useRef<number | undefined>(undefined)
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<CreatedOrder | null>(null)
   const [readyOrders, setReadyOrders] = useState<ReadyNotification[]>([])
@@ -321,7 +327,7 @@ export default function PointOfSale() {
     addedTimer.current = window.setTimeout(() => setJustAdded(null), 850)
   }
 
-  useEffect(() => () => window.clearTimeout(addedTimer.current), [])
+  useEffect(() => () => { window.clearTimeout(addedTimer.current); window.clearTimeout(sentTimer.current) }, [])
 
   function changeQuantity(key: string, change: number) {
     setCart((current) => current.flatMap((line) => {
@@ -351,14 +357,17 @@ export default function PointOfSale() {
   function holdSale() {
     if (!cart.length) return
     const table = tables.find((t) => t.id === tableId)
-    setHeldSales((current) => [...current, { key: crypto.randomUUID(), label: table?.label ?? 'Takeaway', tableId, discount, notes: '', cart }])
+    holdSeq.current += 1
+    setHeldSales((current) => [...current, { key: crypto.randomUUID(), heldNo: holdSeq.current, label: table?.label ?? 'Takeaway', tableId, discount, notes: '', party, cart }])
     resetSale()
+    toast.info('Sale held', 'Resume it from the panel above the order.')
   }
 
   function resumeSale(held: HeldSale) {
     setCart(held.cart)
     setTableId(held.tableId)
     setDiscount(held.discount)
+    setParty(held.party)
     setHeldSales((current) => current.filter((h) => h.key !== held.key))
   }
 
@@ -389,6 +398,11 @@ export default function PointOfSale() {
       })
       resetSale()
       setConfirmation(response.order)
+      const msg = instantServe ? `Order #${response.order.orderNumber} served` : `Order #${response.order.orderNumber} sent to the kitchen`
+      toast.success(msg)
+      setSentPulse(true)
+      window.clearTimeout(sentTimer.current)
+      sentTimer.current = window.setTimeout(() => setSentPulse(false), 2000)
       await loadPos()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save the order')
@@ -638,15 +652,28 @@ export default function PointOfSale() {
 
           <aside className="mt-8 flex h-fit min-w-0 flex-col gap-3 lg:mt-0">
             {heldSales.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {heldSales.map((held) => (
-                  <div key={held.key} className="flex items-center gap-1 rounded-sm border border-warning/40 bg-warning/10 py-1 pl-2.5 pr-1 text-xs font-semibold text-warning">
-                    <button type="button" onClick={() => resumeSale(held)} className="flex items-center gap-1.5">
-                      <LuPause className="size-3" /> {held.label} · {held.cart.reduce((s, i) => s + i.quantity, 0)} items
-                    </button>
-                    <button type="button" onClick={() => discardHeldSale(held.key)} title="Discard held sale" className="rounded-sm p-1 hover:bg-warning/20"><LuTrash2 className="size-3" /></button>
-                  </div>
-                ))}
+              <div className="rounded-lg border-2 border-warning/40 bg-warning/5 p-2.5">
+                <p className="mb-2 flex items-center gap-1.5 px-0.5 text-[11px] font-bold uppercase tracking-wider text-warning">
+                  <LuPause className="size-3.5" /> Held sales · {heldSales.length}
+                </p>
+                <div className="space-y-2">
+                  {heldSales.map((held) => {
+                    const count = held.cart.reduce((s, i) => s + i.quantity, 0)
+                    const heldTotal = computeFinancials(held.cart, held.discount).total
+                    return (
+                      <div key={held.key} className="flex items-center gap-2 rounded-sm border bg-card p-2.5 shadow-sm">
+                        <button type="button" onClick={() => resumeSale(held)} className="min-w-0 flex-1 text-left">
+                          <p className="truncate text-sm font-bold text-foreground">#{held.heldNo} · {partyLabel(held.party)}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">{count} item{count === 1 ? '' : 's'} · {held.label}</p>
+                          <p className="mt-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-warning"><LuPause className="size-3" /> Tap to resume</p>
+                        </button>
+                        <span className="shrink-0 rounded-full border border-warning/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-warning">Held</span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatKes(heldTotal)}</span>
+                        <button type="button" onClick={() => discardHeldSale(held.key)} title="Discard held sale" className="shrink-0 rounded-sm p-1.5 text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-4" /></button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 
@@ -762,9 +789,20 @@ export default function PointOfSale() {
                 <button disabled={cart.length === 0} onClick={holdSale} className="flex items-center justify-center gap-1.5 rounded-sm border border-warning/50 px-3 py-2.5 text-xs font-bold text-warning transition hover:bg-warning/10 disabled:cursor-not-allowed disabled:opacity-40">
                   <LuPause className="size-3.5" /> Hold
                 </button>
-                <button disabled={cart.length === 0 || submitting || needsLocationChoice} onClick={() => void submitOrder()} className="flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary py-2.5 text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
-                  {submitting && <LuLoaderCircle className="animate-spin" />}
-                  {submitting ? 'Sending…' : instantServe ? `Serve now · ${formatKes(financials.total)}` : `Send order · ${formatKes(financials.total)}`}
+                <button
+                  disabled={sentPulse || cart.length === 0 || submitting || needsLocationChoice}
+                  onClick={() => void submitOrder()}
+                  className={cn(
+                    'flex flex-1 items-center justify-center gap-2 rounded-sm py-2.5 text-sm font-bold transition',
+                    sentPulse
+                      ? 'bg-success text-success-foreground'
+                      : 'bg-primary text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  {sentPulse ? <><LuCircleCheck className="size-4" /> {instantServe ? 'Served!' : 'Order sent!'}</>
+                    : submitting ? <><LuLoaderCircle className="animate-spin" /> Sending…</>
+                    : instantServe ? `Serve now · ${formatKes(financials.total)}`
+                    : `Send order · ${formatKes(financials.total)}`}
                 </button>
               </div>
             </div>
