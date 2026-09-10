@@ -13,6 +13,7 @@ import {
   LuTrash2,
 } from 'react-icons/lu'
 import { api, hasApiTenant } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
@@ -240,9 +241,9 @@ export default function Assets() {
           <h1 className="mt-1 font-display text-3xl font-semibold">Assets</h1>
           <p className="mt-2 text-sm text-muted-foreground">Durable equipment bought through Store — chairs, plates, cutlery — counted and tracked, not sold or consumed.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> Register asset
-        </button>
+        </Button>
       </header>
 
       <section className="mt-7 grid gap-3 sm:grid-cols-2">

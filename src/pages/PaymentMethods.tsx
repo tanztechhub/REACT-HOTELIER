@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuBan, LuCircleAlert, LuCircleCheck, LuCreditCard, LuLoaderCircle, LuLock, LuPencil, LuPlus, LuSearch, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -115,9 +116,9 @@ export default function PaymentMethods() {
           <h1 className="mt-1 flex items-center gap-2 font-display text-3xl font-semibold"><LuCreditCard className="text-accent" /> How customers can pay</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Enable, disable, or add the payment methods your checkout will offer.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> New payment method
-        </button>
+        </Button>
       </header>
 
       {error && <Msg error text={error} />}

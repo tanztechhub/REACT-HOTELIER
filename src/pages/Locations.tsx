@@ -15,6 +15,7 @@ import {
   LuUtensils,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -212,9 +213,9 @@ export default function Locations() {
               Every selling point, warehouse, and internal store this property runs. Menu items and staff can be scoped to one, so the POS only ever shows what's sellable there.
             </p>
           </div>
-          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <Button onClick={openCreate} className="shrink-0">
             <LuPlus /> New location
-          </button>
+          </Button>
         </div>
 
         {loading ? (

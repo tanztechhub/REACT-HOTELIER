@@ -17,6 +17,7 @@ import {
   LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
@@ -281,9 +282,9 @@ export default function MenuItems() {
           <p className="text-xs font-semibold uppercase tracking-widest text-secondary">{items.length} · Menu</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Menu Items</h1>
         </div>
-        <button onClick={openCreate} disabled={categories.length === 0} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 disabled:opacity-60">
+        <Button onClick={openCreate} disabled={categories.length === 0} className="shrink-0">
           <LuPlus /> New item
-        </button>
+        </Button>
       </header>
 
       {categories.length === 0 && !loading && (

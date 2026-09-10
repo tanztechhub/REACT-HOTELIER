@@ -15,6 +15,7 @@ import {
   LuX,
 } from 'react-icons/lu'
 import { api, hasApiTenant } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import StatCard from '@/components/ui/StatCard'
 import { cn } from '@/lib/utils'
@@ -272,9 +273,9 @@ export default function Purchases() {
           <h1 className="mt-1 font-display text-3xl font-semibold">Purchases</h1>
           <p className="mt-2 text-sm text-muted-foreground">Purchase orders raised against a supplier. A document for now — receiving stock into the store comes later.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> New purchase
-        </button>
+        </Button>
       </header>
 
       <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

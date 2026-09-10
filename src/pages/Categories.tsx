@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuCircleCheck, LuFolderTree, LuLoaderCircle, LuPencil, LuPlus, LuTag, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
@@ -150,9 +151,9 @@ export default function Categories({ scope = 'STORE', title = 'Categories', subt
           {embedded ? <h2 className="font-display text-xl font-semibold">{title}</h2> : <h1 className="mt-1 font-display text-3xl font-semibold">{title}</h1>}
           <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        <button onClick={() => openCreate()} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={() => openCreate()}>
           <LuPlus /> Add category
-        </button>
+        </Button>
       </header>
 
       <section className="mt-7 grid gap-3 sm:grid-cols-3">

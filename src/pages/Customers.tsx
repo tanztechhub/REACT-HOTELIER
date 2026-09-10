@@ -10,6 +10,7 @@ import {
   LuTrash2,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -250,9 +251,9 @@ export default function Customers() {
           <h1 className="mt-1 font-display text-3xl font-semibold">Customers</h1>
           <p className="mt-2 text-sm text-muted-foreground">Full customer profiles — contact details, preferences, and history in one place.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> Add customer
-        </button>
+        </Button>
       </header>
 
       {error && (

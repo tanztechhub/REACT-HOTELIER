@@ -15,6 +15,7 @@ import {
   LuUsers,
 } from "react-icons/lu";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
 
 type Member = {
   id: string;
@@ -211,12 +212,9 @@ export default function ServiceMembershipPlans() {
               connected catalogue.
             </p>
           </div>
-          <button
-            onClick={create}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-purple-950 shadow-lg"
-          >
+          <Button onClick={create} className="shrink-0">
             <LuPlus /> Create plan
-          </button>
+          </Button>
         </div>
       </header>
       {error && <Message error text={error} />}{" "}

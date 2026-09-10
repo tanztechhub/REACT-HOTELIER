@@ -17,6 +17,7 @@ import {
 } from "react-icons/lu";
 import { api } from "@/lib/api";
 import SharedStatCard from "@/components/ui/StatCard";
+import Button from "@/components/ui/Button";
 
 type Status = "ACTIVE" | "PAUSED" | "EXPIRED" | "CANCELLED";
 type Customer = {
@@ -285,12 +286,9 @@ export default function ServiceMemberships() {
             >
               <LuPalette /> Customize
             </button>
-            <button
-              onClick={create}
-              className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-900 shadow-lg"
-            >
+            <Button onClick={create} className="shrink-0">
               <LuPlus /> New membership
-            </button>
+            </Button>
           </div>
         </div>
       </header>

@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
+import Button from '@/components/ui/Button'
 import { useAppSelector } from '@/store/hooks'
 
 const date = () => new Date().toISOString().slice(0, 10)
@@ -172,12 +173,12 @@ export default function Expenses() {
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Record incidental spending as it happens — tape, fare, a replacement part — each tagged with a category.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCategories(true)} className="inline-flex items-center gap-2 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">
+          <Button variant="secondary" onClick={() => setShowCategories(true)}>
             <LuSettings2 /> Manage categories
-          </button>
-          <button onClick={openCreate} disabled={noLookups} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 disabled:opacity-60">
+          </Button>
+          <Button onClick={openCreate} disabled={noLookups}>
             <LuPlus /> Record expense
-          </button>
+          </Button>
         </div>
       </header>
 

@@ -4,13 +4,36 @@ import { cn } from '@/lib/utils'
 /**
  * One flat, paper-lift stat card — the single design used for every summary
  * tile across the app (Dashboard downward). Flat coloured fill, matching icon
- * chip, a neutral layered shadow so it reads like a sheet lifted off the page.
+ * chip, a neutral layered shadow so it reads like a sheet lifted off the page,
+ * and the signature fingerprint contour lines sweeping out of the top-right.
  *
  * Colour is picked from a fixed non-primary palette by `index` (so a row of
  * cards comes out multi-coloured and breaks the monotony). Pass `tone` for the
  * semantic cases — a warning / bad / good number that should always read the
  * same regardless of position.
  */
+
+/** Concentric contour lines anchored at the top-right corner — the app's
+ * signature stat-card texture. Uses `currentColor` so it tints itself to the
+ * card's own text colour; the card's `overflow-hidden` clips it. */
+function StatCardRings({ className }: { className?: string }) {
+  const radii = [18, 34, 50, 66, 82, 98, 114, 130, 146]
+  return (
+    <svg viewBox="0 0 160 160" className={className} aria-hidden="true" fill="none">
+      {radii.map((r, i) => (
+        <circle
+          key={r}
+          cx="150"
+          cy="12"
+          r={r}
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeOpacity={0.3 - i * 0.028}
+        />
+      ))}
+    </svg>
+  )
+}
 
 type Swatch = { bg: string; text: string; dim: string; chip: string }
 
@@ -72,18 +95,21 @@ export default function StatCard({ label, value, icon, hint, index, tone, classN
         className,
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className={cn('text-[11px] font-semibold uppercase tracking-wider', swatch.dim)}>
-          {label}
-        </span>
-        {icon != null && (
-          <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-md', swatch.chip)}>
-            {icon}
+      <StatCardRings className="pointer-events-none absolute -right-6 -top-10 size-44" />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <span className={cn('text-[11px] font-semibold uppercase tracking-wider', swatch.dim)}>
+            {label}
           </span>
-        )}
+          {icon != null && (
+            <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-md', swatch.chip)}>
+              {icon}
+            </span>
+          )}
+        </div>
+        <p className="mt-3 font-display text-2xl font-semibold tabular-nums">{value}</p>
+        {hint != null && <p className={cn('mt-1 text-xs', swatch.dim)}>{hint}</p>}
       </div>
-      <p className="mt-3 font-display text-2xl font-semibold tabular-nums">{value}</p>
-      {hint != null && <p className={cn('mt-1 text-xs', swatch.dim)}>{hint}</p>}
     </div>
   )
 }

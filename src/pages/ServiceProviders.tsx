@@ -15,6 +15,7 @@ import {
   LuUsers,
 } from "react-icons/lu";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
 
 type Schedule = {
   id: string;
@@ -197,12 +198,9 @@ export default function ServiceProviders() {
               services and appointments.
             </p>
           </div>
-          <button
-            onClick={create}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-slate-950 shadow-lg"
-          >
+          <Button onClick={create} className="shrink-0">
             <LuPlus /> Add provider
-          </button>
+          </Button>
         </div>
       </header>
       {error && <Message error text={error} />}{" "}

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { LuBedDouble, LuCheck, LuCircleAlert, LuClipboardList, LuLoaderCircle, LuPencil, LuPlus, LuSparkles, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import StatCard from '@/components/ui/StatCard'
+import Button from '@/components/ui/Button'
 
 type Status = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
 type TaskType = 'CLEANING' | 'INSPECTION' | 'MAINTENANCE'
@@ -82,7 +83,7 @@ export default function Housekeeping() {
   }
 
   return <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
-    <header className="rounded-sm bg-linear-to-r from-[#173d35] to-accent p-7 text-white shadow-xl"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-white/60">Housekeeping command centre</p><h1 className="mt-3 font-display text-3xl font-semibold">Turn every room into a welcome.</h1><p className="mt-2 text-sm text-white/70">Room readiness is synchronized with Reception every 10 seconds.</p></div><button onClick={openCreate} className="flex items-center gap-2 rounded-sm bg-white px-4 py-2.5 text-sm font-bold text-accent"><LuPlus /> New task</button></div></header>
+    <header className="rounded-sm bg-linear-to-r from-[#173d35] to-accent p-7 text-white shadow-xl"><div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-white/60">Housekeeping command centre</p><h1 className="mt-3 font-display text-3xl font-semibold">Turn every room into a welcome.</h1><p className="mt-2 text-sm text-white/70">Room readiness is synchronized with Reception every 10 seconds.</p></div><Button onClick={openCreate} className="shrink-0"><LuPlus /> New task</Button></div></header>
     {error && <Message error text={error} />}{notice && <Message text={notice} />}
     <section className="mt-6 grid gap-4 sm:grid-cols-3"><Metric index={0} icon={<LuClipboardList />} label="Pending" value={summary.pending} /><Metric index={1} icon={<LuSparkles />} label="In progress" value={summary.inProgress} /><Metric index={2} icon={<LuBedDouble />} label="Completed" value={summary.completed} /></section>
     <div className="mt-7 flex w-fit rounded-sm border bg-card p-1">{([['ALL','All'],['PENDING','Pending'],['IN_PROGRESS','In progress'],['COMPLETED','Completed']] as const).map(([value,label]) => <button key={value} onClick={() => setFilter(value)} className={`rounded-sm px-4 py-2 text-sm font-semibold ${filter === value ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted'}`}>{label}</button>)}</div>

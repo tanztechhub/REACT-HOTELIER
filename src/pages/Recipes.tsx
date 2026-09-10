@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuChefHat, LuCircleAlert, LuCircleCheck, LuClock3, LuListChecks, LuLoaderCircle, LuPencil, LuPlus, LuTrash2, LuUtensils } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -146,9 +147,9 @@ export default function Recipes() {
           <h1 className="mt-1 font-display text-3xl font-semibold">Recipes</h1>
           <p className="mt-2 text-sm text-muted-foreground">How each dish is made — steps, prep time, and the products it consumes from the kitchen.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> New recipe
-        </button>
+        </Button>
       </header>
 
       {error && (

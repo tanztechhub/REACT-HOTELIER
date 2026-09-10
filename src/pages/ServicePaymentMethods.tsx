@@ -16,6 +16,7 @@ import {
   LuWifi,
 } from "react-icons/lu";
 import { api } from "@/lib/api";
+import Button from "@/components/ui/Button";
 
 type Method = {
   id: string;
@@ -208,12 +209,9 @@ export default function ServicePaymentMethods() {
               appointments.
             </p>
           </div>
-          <button
-            onClick={() => create()}
-            className="flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-emerald-950 shadow-lg"
-          >
+          <Button onClick={() => create()} className="shrink-0">
             <LuPlus /> Add method
-          </button>
+          </Button>
         </div>
       </header>
       {error && <Message error text={error} />}{" "}

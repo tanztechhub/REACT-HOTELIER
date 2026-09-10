@@ -18,6 +18,7 @@ import {
 
 import { api } from "@/lib/api";
 import SharedStatCard from "@/components/ui/StatCard";
+import Button from "@/components/ui/Button";
 
 type RoomStatus = "VACANT" | "OCCUPIED" | "OUT_OF_SERVICE";
 type Cleanliness = "CLEAN" | "DIRTY" | "INSPECTING";
@@ -396,12 +397,9 @@ export default function Rooms() {
               in one room board.
             </p>
           </div>
-          <button
-            onClick={openCreate}
-            className="flex items-center justify-center gap-2 rounded-sm bg-white px-4 py-2.5 text-sm font-bold text-primary shadow-lg"
-          >
+          <Button onClick={openCreate} className="shrink-0">
             <LuPlus /> Add room
-          </button>
+          </Button>
         </div>
       </header>
       {error && (

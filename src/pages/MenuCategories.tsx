@@ -13,6 +13,7 @@ import {
   LuTrash2,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -154,9 +155,9 @@ export default function MenuCategories() {
               The groups a menu item can sit under — Hot Drinks, Bakery, Cocktails. Order sets how they appear on the menu; an inactive category is hidden but keeps its items.
             </p>
           </div>
-          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <Button onClick={openCreate} className="shrink-0">
             <LuPlus /> New category
-          </button>
+          </Button>
         </div>
 
         <div className="border-b p-4">

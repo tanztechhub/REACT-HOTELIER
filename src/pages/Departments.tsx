@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuLoaderCircle, LuNetwork, LuPencil, LuPlus, LuPower, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -117,9 +118,9 @@ export default function Departments() {
               The departments staff belong to. Rename freely — every employee keeps pointing at the same department. An inactive one drops out of the picker but stays on existing records.
             </p>
           </div>
-          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <Button onClick={openCreate} className="shrink-0">
             <LuPlus /> New department
-          </button>
+          </Button>
         </div>
 
         {loading ? (

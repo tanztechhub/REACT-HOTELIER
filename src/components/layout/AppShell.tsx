@@ -64,7 +64,7 @@ export default function AppShell() {
           )}
         </AnimatePresence>
 
-        <main className="scrollbar-none relative min-w-0 flex-1 overflow-y-auto">
+        <main className="scrollbar-none relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
           <Outlet />
         </main>
       </div>

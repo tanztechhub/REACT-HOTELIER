@@ -134,13 +134,17 @@ export default function ProductsPointOfSale() {
     <div className="mx-auto grid min-h-full max-w-7xl gap-0 px-6 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24px_360px] lg:px-10">
       <section>
         <div className="relative">
-          <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-accent shadow-lg" aria-hidden="true" />
-          <div className="relative flex flex-wrap items-center justify-between gap-3 rounded-sm bg-secondary px-5 py-3.5 shadow-sm">
+          <div className="pointer-events-none absolute -bottom-2 left-3 right-1 top-2 rotate-[0.6deg] rounded-sm border border-black/10 bg-white/70" aria-hidden="true" />
+          <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-[#f2921a] shadow-lg" aria-hidden="true" />
+          <div
+            className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-5 py-4 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)]"
+            style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(2,6,23,0.055) 28px)' }}
+          >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">Checkout</p>
-              <h1 className="mt-1 font-display text-2xl font-semibold text-white">Products POS</h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Checkout</p>
+              <h1 className="mt-1 font-display text-2xl font-semibold text-slate-900">Products POS</h1>
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-white/80">
+            <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
               <span className="flex items-center gap-1.5"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
               <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
               {fixedLocation ? (
@@ -148,7 +152,7 @@ export default function ProductsPointOfSale() {
               ) : pickableLocations.length > 0 ? (
                 <label className="flex items-center gap-1.5">
                   <LuMapPin className="size-3.5" />
-                  <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-white/30 bg-white/10 px-1.5 py-1 text-xs font-medium text-white outline-none [&>option]:text-foreground">
+                  <select value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border border-slate-300 bg-white px-1.5 py-1 text-xs font-medium text-slate-700 outline-none">
                     <option value="">Select location…</option>
                     {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
@@ -197,21 +201,21 @@ export default function ProductsPointOfSale() {
           ) : visibleItems.length === 0 ? (
             <div className="rounded-sm border border-dashed p-10 text-center text-sm text-muted-foreground">No sellable products with stock at this location.</div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
               {visibleItems.map((item) => {
                 const inCart = cart.find((c) => c.id === item.id)?.quantity ?? 0
                 const soldOut = inCart >= item.availableQuantity
                 return (
-                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className="group relative overflow-hidden rounded-sm border border-border bg-card p-5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm">
-                    <div className="flex items-start justify-between">
-                      <span className="flex size-11 items-center justify-center rounded-sm bg-accent/10 text-accent"><LuPackage className="size-5" /></span>
-                      <span className="rounded-sm bg-muted px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category?.name ?? 'Uncategorized'}</span>
+                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className="group relative overflow-hidden rounded-sm border border-border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-accent/10 text-accent sm:size-11"><LuPackage className="size-5" /></span>
+                      <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category?.name ?? 'Uncategorized'}</span>
                     </div>
-                    <h2 className="mt-5 text-base font-semibold text-foreground">{item.name}</h2>
+                    <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
                     <p className="mt-1 text-xs text-muted-foreground">{item.availableQuantity - inCart} {item.unit} left</p>
-                    <div className="mt-4 flex items-center justify-between border-t pt-4">
-                      <span className="text-lg font-bold text-foreground">{formatKes(item.price)}</span>
-                      <span className="flex size-8 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110"><LuPlus /></span>
+                    <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
+                      <span className="truncate text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110"><LuPlus /></span>
                     </div>
                   </button>
                 )

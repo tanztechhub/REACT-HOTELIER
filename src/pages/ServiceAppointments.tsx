@@ -15,6 +15,7 @@ import {
 } from "react-icons/lu";
 import { api } from "@/lib/api";
 import SharedStatCard from "@/components/ui/StatCard";
+import Button from "@/components/ui/Button";
 
 type Customer = {
   id: string;
@@ -274,12 +275,9 @@ export default function ServiceAppointments() {
               workflow.
             </p>
           </div>
-          <button
-            onClick={create}
-            className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-primary"
-          >
+          <Button onClick={create} className="shrink-0">
             <LuPlus /> New appointment
-          </button>
+          </Button>
         </div>
       </header>
       {error && <Message error text={error} />}{" "}

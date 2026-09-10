@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuCircleCheck, LuLoaderCircle, LuPencil, LuPlus, LuSettings2, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -142,12 +143,12 @@ export default function Services() {
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Sellable services — spa, transport, laundry, and more — each priced per unit.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowCategories(true)} className="inline-flex items-center gap-2 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">
+          <Button variant="secondary" onClick={() => setShowCategories(true)}>
             <LuSettings2 /> Manage categories
-          </button>
-          <button onClick={openCreate} disabled={noLookups} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15 disabled:opacity-60">
+          </Button>
+          <Button onClick={openCreate} disabled={noLookups}>
             <LuPlus /> Add service
-          </button>
+          </Button>
         </div>
       </header>
 

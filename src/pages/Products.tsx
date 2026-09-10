@@ -15,6 +15,7 @@ import {
   LuTrash2,
 } from 'react-icons/lu'
 import { api, hasApiTenant } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
@@ -264,12 +265,12 @@ export default function Products() {
           <p className="mt-2 text-sm text-muted-foreground">Record everything received into the store and track stock on hand.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowUnits(true)} className="inline-flex items-center justify-center gap-2 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">
+          <Button variant="secondary" onClick={() => setShowUnits(true)}>
             <LuRuler /> Manage UOM
-          </button>
-          <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          </Button>
+          <Button onClick={openCreate}>
             <LuPlus /> Add product
-          </button>
+          </Button>
         </div>
       </header>
 

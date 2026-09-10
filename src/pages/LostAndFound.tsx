@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuCircleCheck, LuLoaderCircle, LuLock, LuPackageCheck, LuPencil, LuPlus, LuRotateCcw, LuSearch, LuSearchCheck, LuTrash2, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
@@ -150,9 +151,9 @@ export default function LostAndFound() {
           <h1 className="mt-1 flex items-center gap-2 font-display text-3xl font-semibold"><LuSearchCheck className="text-secondary" /> Lost &amp; Found</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">Log items found around the property and track them until their owner collects them.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+        <Button onClick={openCreate}>
           <LuPlus /> Log found item
-        </button>
+        </Button>
       </header>
 
       {error && <Msg error text={error} />}

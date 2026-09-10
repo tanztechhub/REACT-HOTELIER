@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuImageOff, LuLoaderCircle, LuPencil, LuPlus, LuPower, LuSearch, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
@@ -121,7 +122,7 @@ export default function Addons() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
       <div>
         <p className="text-xs font-semibold uppercase tracking-widest text-secondary">{addons.length} · Menu</p>
         <h1 className="mt-1 font-display text-3xl font-semibold">Add-ons</h1>
@@ -142,9 +143,9 @@ export default function Addons() {
               One record per extra — Cheddar, Bacon, Extra Espresso. Tag each with a menu category so the POS add-on picker can filter to it; leave it blank to keep it general.
             </p>
           </div>
-          <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+          <Button onClick={openCreate} className="shrink-0">
             <LuPlus /> New add-on
-          </button>
+          </Button>
         </div>
 
         <div className="flex flex-col gap-3 border-b p-4 sm:flex-row">
