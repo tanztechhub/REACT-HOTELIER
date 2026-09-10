@@ -46,6 +46,7 @@ import {
   LuRuler,
   LuHistory,
   LuNetwork,
+  LuLayoutGrid,
 } from 'react-icons/lu'
 
 export const PERMISSION_SECTIONS = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
@@ -129,6 +130,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Active Orders', href: '/kitchen', icon: LuClipboardList, moduleKey: 'KITCHEN' },
       { label: 'Menu and Addons', href: '/kitchen/menu-addons', icon: LuUtensils },
+      { label: 'Menu Categories', href: '/menu/categories', icon: LuLayoutGrid },
       { label: 'Recipes', href: '/kitchen/recipes', icon: LuChefHat },
       { label: 'Daily Expenses', href: '/kitchen/daily-expenses', icon: LuReceipt },
     ],

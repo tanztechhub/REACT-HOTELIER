@@ -21,6 +21,7 @@ import RolesAndPermissions from "@/pages/RolesAndPermissions";
 import Categories from "@/pages/Categories";
 import Recipes from "@/pages/Recipes";
 import MenuAndAddons from "@/pages/MenuAndAddons";
+import MenuCategories from "@/pages/MenuCategories";
 import Tables from "@/pages/Tables";
 import Reports from "@/pages/Reports";
 import Receipts from "@/pages/Receipts";
@@ -180,6 +181,7 @@ function App() {
         <Route path="/inventory/categories" element={<Categories />} />
         <Route path="/kitchen/recipes" element={<Recipes />} />
         <Route path="/kitchen/menu-addons" element={<MenuAndAddons />} />
+        <Route path="/menu/categories" element={<MenuCategories />} />
         <Route path="/sales/tables" element={<Tables />} />
         <Route path="/sales/receipts" element={<Receipts />} />
         <Route path="/reports" element={<Reports />} />
