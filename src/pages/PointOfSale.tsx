@@ -11,17 +11,15 @@ import CustomerSelectModal, { partyLabel, type SaleParty } from '@/components/po
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 
-type ApiAddon = { id: string; name: string; description?: string | null; price: string | number; imageUrl?: string | null; isActive?: boolean }
 type ApiVariant = { id: string; name: string; price: string | number; sku: string | null }
-type ApiAddonGroup = {
+type ApiCatalogAddon = {
   id: string
   name: string
   description: string | null
-  selectionType: 'SINGLE' | 'MULTIPLE'
-  minSelections: number
-  maxSelections: number
-  required: boolean
-  addons: ApiAddon[]
+  price: string | number
+  imageUrl: string | null
+  menuCategoryId: string | null
+  menuCategory: { id: string; name: string } | null
 }
 type TaxMode = 'INCLUSIVE' | 'EXCLUSIVE'
 type TaxTreatment = 'STANDARD' | 'ZERO_RATED' | 'EXEMPT'
@@ -32,9 +30,7 @@ type ApiMenuItem = {
   price: string | number
   temperature: 'HOT' | 'COLD' | 'OTHER'
   category: { id: string; name: string }
-  addons: ApiAddon[]
   variants: ApiVariant[]
-  addonGroups: ApiAddonGroup[]
   taxRate: string | number | null
   taxMode: TaxMode | null
   taxTreatment: TaxTreatment | null
@@ -45,17 +41,10 @@ type BusinessProfile = { businessName: string; taxRate: string | null; taxMode: 
 
 type LineTax = { rate: number; mode: TaxMode; treatment: TaxTreatment }
 type Addon = { id: string; name: string; price: number }
+// The flat add-on catalog — each add-on optionally tagged with a menu
+// category the POS picker filters on.
+type CatalogAddon = Addon & { categoryId: string | null; categoryName: string | null }
 type Variant = { id: string; name: string; price: number }
-type AddonGroup = {
-  id: string
-  name: string
-  description: string | null
-  selectionType: 'SINGLE' | 'MULTIPLE'
-  minSelections: number
-  maxSelections: number
-  required: boolean
-  addons: Addon[]
-}
 type MenuItem = {
   id: string
   name: string
@@ -64,8 +53,6 @@ type MenuItem = {
   temperature: 'HOT' | 'COLD' | 'OTHER'
   category: { id: string; name: string }
   variants: Variant[]
-  addonGroups: AddonGroup[]
-  legacyAddons: Addon[]
   tax: LineTax
 }
 // One configured line in the sale: an item, the chosen variant (size/option)
@@ -92,11 +79,6 @@ function normalizeMenuItem(raw: ApiMenuItem): MenuItem {
     temperature: raw.temperature,
     category: raw.category,
     variants: raw.variants.map((v) => ({ id: v.id, name: v.name, price: toNumber(v.price) })),
-    addonGroups: raw.addonGroups.map((g) => ({
-      ...g,
-      addons: g.addons.map((a) => ({ id: a.id, name: a.name, price: toNumber(a.price) })),
-    })),
-    legacyAddons: raw.addons.filter((a) => a.isActive !== false).map((a) => ({ id: a.id, name: a.name, price: toNumber(a.price) })),
     tax: {
       rate: raw.taxRate != null ? toNumber(raw.taxRate) : 0,
       mode: raw.taxMode ?? 'INCLUSIVE',
@@ -110,9 +92,10 @@ const taxLabel = (t: LineTax) =>
     : t.treatment === 'ZERO_RATED' || t.rate <= 0 ? 'Zero-rated (0%)'
     : `VAT ${t.rate}%${t.mode === 'INCLUSIVE' ? ' (incl)' : ''}`
 
-/** Whether an item needs the options step before it can go on the cart — it
- * has sizes to pick, add-on groups to satisfy, or legacy add-ons to offer. */
-const needsCustomize = (item: MenuItem) => item.variants.length > 0 || item.addonGroups.length > 0 || item.legacyAddons.length > 0
+/** Whether tapping the item opens the options step: it has sizes to pick, or
+ * there are add-ons in the catalog to attach. Otherwise it drops straight
+ * onto the cart. */
+const needsCustomize = (item: MenuItem, addonCount: number) => item.variants.length > 0 || addonCount > 0
 
 /** Same item + same variant + same multiset of add-ons is the same line. */
 const configKey = (itemId: string, variantId: string | null, addonIds: string[]) =>
@@ -120,20 +103,6 @@ const configKey = (itemId: string, variantId: string | null, addonIds: string[])
 
 const lineUnitPrice = (line: CartLine) => (line.variant?.price ?? line.item.price) + line.addons.reduce((sum, a) => sum + a.price, 0)
 const lineTotal = (line: CartLine) => lineUnitPrice(line) * line.quantity
-
-/** The effective min/max for a group once SINGLE and `required` are folded in. */
-function groupBounds(group: AddonGroup) {
-  const max = group.selectionType === 'SINGLE' ? 1 : group.maxSelections
-  const min = Math.max(group.minSelections, group.required ? 1 : 0)
-  return { min, max }
-}
-
-function groupHint(group: AddonGroup) {
-  const { min, max } = groupBounds(group)
-  if (min === 0) return max === 1 ? 'Optional' : `Optional · up to ${max}`
-  if (min === max) return `Choose ${min}`
-  return `Choose ${min}–${max}`
-}
 
 const round2 = (v: number) => Math.round((v + Number.EPSILON) * 100) / 100
 
@@ -182,6 +151,7 @@ export default function PointOfSale() {
   const user = useAppSelector((s) => s.auth.user)
   const [tab, setTab] = useState<'NEW' | 'ACTIVE'>('NEW')
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [allAddons, setAllAddons] = useState<CatalogAddon[]>([])
   const [tables, setTables] = useState<RestaurantTable[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [profile, setProfile] = useState<BusinessProfile | null>(null)
@@ -248,16 +218,21 @@ export default function PointOfSale() {
     setLoading(true)
     setError('')
     try {
-      const [profileResponse, locationResponse, methodsResponse] = await Promise.all([
+      const [profileResponse, locationResponse, methodsResponse, addonResponse] = await Promise.all([
         api<{ profile: BusinessProfile | null }>('/business-profile'),
         api<{ locations: Location[] }>('/locations'),
         api<{ methods: (PaymentMethod & { code: string })[] }>('/payment-methods?activeOnly=true'),
+        api<{ addons: ApiCatalogAddon[] }>('/pos/addons'),
       ])
       setProfile(profileResponse.profile)
       setLocations(locationResponse.locations)
       // Room Charge is a system method the backend resolves by code when
       // settling to a folio — it isn't a real "how did they pay" choice.
       setPaymentMethods(methodsResponse.methods.filter((m) => m.code !== 'ROOM_CHARGE'))
+      setAllAddons(addonResponse.addons.map((a) => ({
+        id: a.id, name: a.name, price: toNumber(a.price),
+        categoryId: a.menuCategoryId, categoryName: a.menuCategory?.name ?? null,
+      })))
       await Promise.all([loadMenuItems(), loadTables(), loadActiveOrders()])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load the POS menu')
@@ -301,7 +276,7 @@ export default function PointOfSale() {
   }
 
   function onItemClick(item: MenuItem) {
-    if (needsCustomize(item)) { setCustomizing(item); return }
+    if (needsCustomize(item, allAddons.length)) { setCustomizing(item); return }
     addConfiguredLine(item, null, [], 1)
   }
 
@@ -540,11 +515,11 @@ export default function PointOfSale() {
                         <p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">{item.description || item.category.name}</p>
                         <div className="mt-4 flex items-center justify-between border-t pt-4">
                           <span className="text-lg font-bold text-foreground">{item.variants.length > 0 ? `from ${formatKes(priceFrom)}` : formatKes(item.price)}</span>
-                          <span className="flex size-8 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110">{needsCustomize(item) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
+                          <span className="flex size-8 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110">{needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
                         </div>
-                        {needsCustomize(item) && (
+                        {needsCustomize(item, allAddons.length) && (
                           <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">
-                            {[item.variants.length > 0 && 'Options', (item.addonGroups.length > 0 || item.legacyAddons.length > 0) && 'Add-ons'].filter(Boolean).join(' · ')}
+                            {[item.variants.length > 0 && 'Options', allAddons.length > 0 && 'Add-ons'].filter(Boolean).join(' · ')}
                           </span>
                         )}
                       </button>
@@ -698,6 +673,7 @@ export default function PointOfSale() {
       {customizing && (
         <CustomizeModal
           item={customizing}
+          allAddons={allAddons}
           onClose={() => setCustomizing(null)}
           onAdd={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
         />
@@ -722,6 +698,7 @@ export default function PointOfSale() {
         <AddItemsModal
           order={addItemsOrder}
           menuItems={menuItems}
+          allAddons={allAddons}
           onClose={() => setAddItemsOrder(null)}
           onAdded={() => { setAddItemsOrder(null); void loadActiveOrders() }}
         />
@@ -730,41 +707,39 @@ export default function PointOfSale() {
   )
 }
 
-/** The options step: pick a variant (size/option) and satisfy each add-on
- * group's rules before the line can go on the cart. Shown for any item that
- * has variants, add-on groups, or legacy add-ons; one-click items skip it. */
-function CustomizeModal({ item, onClose, onAdd }: {
+/** The options step: pick a variant (size/option) if the item has any, then
+ * attach add-ons from the flat catalog. The add-on list is filtered by menu
+ * category (defaulting to the item's own), or "All". Tap to add, × to remove.
+ * Shown whenever the item has variants or the catalog has add-ons. */
+function CustomizeModal({ item, allAddons, onClose, onAdd }: {
   item: MenuItem
+  allAddons: CatalogAddon[]
   onClose: () => void
   onAdd: (variant: Variant | null, addons: Addon[], quantity: number) => void
 }) {
   const [variantId, setVariantId] = useState(item.variants[0]?.id ?? '')
-  const [picks, setPicks] = useState<Record<string, string[]>>({})
-  const [legacyPicks, setLegacyPicks] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [quantity, setQuantity] = useState(1)
 
+  // Category chips: "All" + every distinct category present in the catalog.
+  const catOptions = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const a of allAddons) if (a.categoryId && a.categoryName) seen.set(a.categoryId, a.categoryName)
+    return [...seen.entries()].map(([id, name]) => ({ id, name }))
+  }, [allAddons])
+  const [catFilter, setCatFilter] = useState<string>(() =>
+    allAddons.some((a) => a.categoryId === item.category.id) ? item.category.id : 'ALL',
+  )
+
   const variant = item.variants.find((v) => v.id === variantId) ?? null
+  const filtered = catFilter === 'ALL' ? allAddons : allAddons.filter((a) => a.categoryId === catFilter)
+  const selected = selectedIds.map((id) => allAddons.find((a) => a.id === id)!).filter(Boolean)
 
-  function toggle(group: AddonGroup, addonId: string) {
-    setPicks((current) => {
-      const chosen = current[group.id] ?? []
-      const { max } = groupBounds(group)
-      if (group.selectionType === 'SINGLE') {
-        return { ...current, [group.id]: chosen[0] === addonId ? [] : [addonId] }
-      }
-      if (chosen.includes(addonId)) return { ...current, [group.id]: chosen.filter((id) => id !== addonId) }
-      if (chosen.length >= max) return current
-      return { ...current, [group.id]: [...chosen, addonId] }
-    })
-  }
+  const toggle = (id: string) =>
+    setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
 
-  const unmet = item.addonGroups.filter((group) => (picks[group.id]?.length ?? 0) < groupBounds(group).min)
-  const canAdd = (item.variants.length === 0 || !!variant) && unmet.length === 0
-
-  const chosenAddons: Addon[] = [
-    ...item.addonGroups.flatMap((group) => (picks[group.id] ?? []).map((id) => group.addons.find((a) => a.id === id)!).filter(Boolean)),
-    ...legacyPicks.map((id) => item.legacyAddons.find((a) => a.id === id)!).filter(Boolean),
-  ]
+  const canAdd = item.variants.length === 0 || !!variant
+  const chosenAddons: Addon[] = selected.map((a) => ({ id: a.id, name: a.name, price: a.price }))
   const unitPrice = (variant?.price ?? item.price) + chosenAddons.reduce((sum, a) => sum + a.price, 0)
 
   return (
@@ -798,62 +773,63 @@ function CustomizeModal({ item, onClose, onAdd }: {
             </fieldset>
           )}
 
-          {item.addonGroups.map((group) => {
-            const chosen = picks[group.id] ?? []
-            const { max } = groupBounds(group)
-            return (
-              <fieldset key={group.id}>
-                <legend className="mb-2 flex items-center justify-between gap-2 text-sm font-semibold">
-                  <span>{group.name}{unmet.includes(group) && <span className="ml-1.5 text-[11px] font-medium text-destructive">required</span>}</span>
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-accent">{groupHint(group)}</span>
-                </legend>
-                {group.description && <p className="mb-2 text-xs text-muted-foreground">{group.description}</p>}
-                <div className="space-y-1.5">
-                  {group.addons.map((addon) => {
-                    const on = chosen.includes(addon.id)
-                    const disabled = !on && group.selectionType === 'MULTIPLE' && chosen.length >= max
-                    return (
-                      <label key={addon.id} className={cn('flex items-center justify-between gap-3 rounded-sm border px-3 py-2.5 text-sm', on ? 'border-secondary bg-secondary/10 font-medium' : disabled ? 'opacity-40' : 'cursor-pointer hover:bg-muted')}>
-                        <span className="flex items-center gap-2.5">
-                          <input
-                            type={group.selectionType === 'SINGLE' ? 'radio' : 'checkbox'}
-                            name={`group-${group.id}`}
-                            checked={on}
-                            disabled={disabled}
-                            onChange={() => toggle(group, addon.id)}
-                            className="accent-secondary"
-                          />
-                          {addon.name}
-                        </span>
-                        <span className="text-muted-foreground">{addon.price > 0 ? `+ ${formatKes(addon.price)}` : 'Free'}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </fieldset>
-            )
-          })}
+          {allAddons.length > 0 && (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-sm font-semibold">Add-ons</p>
+                {selected.length > 0 && <span className="text-[11px] font-medium text-muted-foreground">{selected.length} added</span>}
+              </div>
 
-          {item.addonGroups.length === 0 && item.legacyAddons.length > 0 && (
-            <fieldset>
-              <legend className="mb-2 flex items-center justify-between text-sm font-semibold">
-                Add-ons <span className="text-[11px] font-medium uppercase tracking-wide text-accent">Optional</span>
-              </legend>
+              {catOptions.length > 0 && (
+                <div className="mb-2.5 flex flex-wrap gap-1.5">
+                  {[{ id: 'ALL', name: 'All' }, ...catOptions].map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setCatFilter(c.id)}
+                      className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', catFilter === c.id ? 'border-secondary bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted')}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {selected.length > 0 && (
+                <div className="mb-2.5 flex flex-wrap gap-1.5">
+                  {selected.map((a) => (
+                    <button key={a.id} type="button" onClick={() => toggle(a.id)} className="inline-flex items-center gap-1.5 rounded-full border border-secondary bg-secondary/10 px-2.5 py-1 text-xs font-medium text-secondary">
+                      {a.name}{a.price > 0 ? ` · ${formatKes(a.price)}` : ''}
+                      <LuX className="size-3" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-1.5">
-                {item.legacyAddons.map((addon) => {
-                  const on = legacyPicks.includes(addon.id)
+                {filtered.length === 0 ? (
+                  <p className="rounded-sm border border-dashed p-3 text-center text-xs text-muted-foreground">No add-ons in this category.</p>
+                ) : filtered.map((addon) => {
+                  const on = selectedIds.includes(addon.id)
                   return (
-                    <label key={addon.id} className={cn('flex cursor-pointer items-center justify-between gap-3 rounded-sm border px-3 py-2.5 text-sm', on ? 'border-secondary bg-secondary/10 font-medium' : 'hover:bg-muted')}>
-                      <span className="flex items-center gap-2.5">
-                        <input type="checkbox" checked={on} onChange={() => setLegacyPicks((cur) => on ? cur.filter((id) => id !== addon.id) : [...cur, addon.id])} className="accent-secondary" />
+                    <button
+                      key={addon.id}
+                      type="button"
+                      onClick={() => toggle(addon.id)}
+                      className={cn('flex w-full items-center justify-between gap-3 rounded-sm border px-3 py-2.5 text-left text-sm', on ? 'border-secondary bg-secondary/10 font-medium' : 'hover:bg-muted')}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={cn('flex size-5 items-center justify-center rounded-sm border', on ? 'border-secondary bg-secondary text-secondary-foreground' : 'text-muted-foreground')}>
+                          {on ? <LuCheck className="size-3.5" /> : <LuPlus className="size-3.5" />}
+                        </span>
                         {addon.name}
                       </span>
                       <span className="text-muted-foreground">{addon.price > 0 ? `+ ${formatKes(addon.price)}` : 'Free'}</span>
-                    </label>
+                    </button>
                   )
                 })}
               </div>
-            </fieldset>
+            </div>
           )}
         </div>
 
@@ -879,9 +855,10 @@ function CustomizeModal({ item, onClose, onAdd }: {
 /** Appends more rounds to an order already in progress — same menu and the
  * same options step, a lighter-weight cart, no table/customer fields since
  * the order already has those. Posts to /pos/orders/:id/items. */
-function AddItemsModal({ order, menuItems, onClose, onAdded }: {
+function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
   order: ActiveOrder
   menuItems: MenuItem[]
+  allAddons: CatalogAddon[]
   onClose: () => void
   onAdded: () => void
 }) {
@@ -913,7 +890,7 @@ function AddItemsModal({ order, menuItems, onClose, onAdded }: {
   }
 
   function onItemClick(item: MenuItem) {
-    if (needsCustomize(item)) { setCustomizing(item); return }
+    if (needsCustomize(item, allAddons.length)) { setCustomizing(item); return }
     addConfiguredLine(item, null, [], 1)
   }
 
@@ -1030,6 +1007,7 @@ function AddItemsModal({ order, menuItems, onClose, onAdded }: {
       {customizing && (
         <CustomizeModal
           item={customizing}
+          allAddons={allAddons}
           onClose={() => setCustomizing(null)}
           onAdd={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
         />

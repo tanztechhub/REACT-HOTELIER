@@ -20,10 +20,8 @@ import Departments from "@/pages/Departments";
 import RolesAndPermissions from "@/pages/RolesAndPermissions";
 import Categories from "@/pages/Categories";
 import Recipes from "@/pages/Recipes";
-import MenuAndAddons from "@/pages/MenuAndAddons";
 import MenuCategories from "@/pages/MenuCategories";
 import MenuItems from "@/pages/MenuItems";
-import AddonGroups from "@/pages/AddonGroups";
 import Addons from "@/pages/Addons";
 import Tables from "@/pages/Tables";
 import Reports from "@/pages/Reports";
@@ -182,10 +180,8 @@ function App() {
         />
         <Route path="/inventory/categories" element={<Categories />} />
         <Route path="/kitchen/recipes" element={<Recipes />} />
-        <Route path="/kitchen/menu-addons" element={<MenuAndAddons />} />
         <Route path="/menu/categories" element={<MenuCategories />} />
         <Route path="/menu/items" element={<MenuItems />} />
-        <Route path="/menu/addon-groups" element={<AddonGroups />} />
         <Route path="/menu/addons" element={<Addons />} />
         <Route path="/sales/tables" element={<Tables />} />
         <Route path="/sales/receipts" element={<Receipts />} />

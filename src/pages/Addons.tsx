@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
+type MenuCategory = { id: string; name: string; isActive: boolean }
 type Addon = {
   id: string
   name: string
@@ -12,20 +13,24 @@ type Addon = {
   price: string
   sku: string | null
   imageUrl: string | null
+  menuCategoryId: string | null
+  menuCategory: { id: string; name: string } | null
   isActive: boolean
-  _count: { orderItems: number; menuItems: number; groupLinks: number }
+  _count: { orderItems: number }
 }
-type Form = { name: string; description: string; price: string; sku: string; imageUrl: string; isActive: boolean }
-const emptyForm: Form = { name: '', description: '', price: '', sku: '', imageUrl: '', isActive: true }
+type Form = { name: string; description: string; price: string; sku: string; imageUrl: string; menuCategoryId: string; isActive: boolean }
+const emptyForm: Form = { name: '', description: '', price: '', sku: '', imageUrl: '', menuCategoryId: '', isActive: true }
 
 const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 
 export default function Addons() {
   const toast = useToast()
   const [addons, setAddons] = useState<Addon[]>([])
+  const [categories, setCategories] = useState<MenuCategory[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
   const [form, setForm] = useState<Form>(emptyForm)
   const [editing, setEditing] = useState<Addon | null>(null)
   const [showForm, setShowForm] = useState(false)
@@ -47,16 +52,22 @@ export default function Addons() {
     }
   }, [toast])
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    api<{ categories: MenuCategory[] }>('/menu-categories').then((r) => setCategories(r.categories)).catch(() => {})
+  }, [])
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return q ? addons.filter((a) => a.name.toLowerCase().includes(q) || (a.sku ?? '').toLowerCase().includes(q)) : addons
-  }, [addons, search])
+    return addons.filter((a) =>
+      (!categoryFilter || (categoryFilter === '__none__' ? !a.menuCategoryId : a.menuCategoryId === categoryFilter)) &&
+      (!q || a.name.toLowerCase().includes(q) || (a.sku ?? '').toLowerCase().includes(q)),
+    )
+  }, [addons, search, categoryFilter])
 
   function openCreate() { setEditing(null); setForm(emptyForm); setShowForm(true) }
   function openEdit(a: Addon) {
     setEditing(a)
-    setForm({ name: a.name, description: a.description ?? '', price: String(Number(a.price)), sku: a.sku ?? '', imageUrl: a.imageUrl ?? '', isActive: a.isActive })
+    setForm({ name: a.name, description: a.description ?? '', price: String(Number(a.price)), sku: a.sku ?? '', imageUrl: a.imageUrl ?? '', menuCategoryId: a.menuCategoryId ?? '', isActive: a.isActive })
     setShowForm(true)
   }
 
@@ -65,7 +76,15 @@ export default function Addons() {
     if (!form.name.trim() || form.price === '') return
     setSaving(true)
     try {
-      const payload = { name: form.name.trim(), description: form.description.trim() || undefined, price: Number(form.price), sku: form.sku.trim() || undefined, imageUrl: form.imageUrl.trim() || undefined, isActive: form.isActive }
+      const payload = {
+        name: form.name.trim(),
+        description: form.description.trim() || undefined,
+        price: Number(form.price),
+        sku: form.sku.trim() || undefined,
+        imageUrl: form.imageUrl.trim() || undefined,
+        menuCategoryId: form.menuCategoryId || null,
+        isActive: form.isActive,
+      }
       await api(editing ? `/addons/${editing.id}` : '/addons', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
       toast.success(editing ? 'Add-on updated.' : 'Add-on created.')
       setShowForm(false)
@@ -118,9 +137,9 @@ export default function Addons() {
         <div className="flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-secondary">Add-ons</p>
-            <h2 className="mt-1 font-display text-xl font-semibold">Reusable extras</h2>
+            <h2 className="mt-1 font-display text-xl font-semibold">Extras a cashier can attach to any item</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              One record per extra — Cheddar, Bacon, Extra Espresso. The same add-on can sit in many groups (Burger Extras, Pizza Extras…). Add these to groups next.
+              One record per extra — Cheddar, Bacon, Extra Espresso. Tag each with a menu category so the POS add-on picker can filter to it; leave it blank to keep it general.
             </p>
           </div>
           <button onClick={openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
@@ -128,24 +147,30 @@ export default function Addons() {
           </button>
         </div>
 
-        <div className="border-b p-4">
-          <label className="relative block">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row">
+          <label className="relative block flex-1">
             <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or SKU…" className="w-full rounded-sm border bg-background py-2.5 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
           </label>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring sm:w-56">
+            <option value="">All categories</option>
+            <option value="__none__">Uncategorised</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </div>
 
         {loading ? (
           <div className="flex min-h-64 items-center justify-center gap-2 p-8 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading add-ons…</div>
         ) : visible.length === 0 ? (
-          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">{search.trim() ? 'No add-ons match your search.' : 'No add-ons yet.'}</div>
+          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">{search.trim() || categoryFilter ? 'No add-ons match.' : 'No add-ons yet.'}</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-sm">
               <thead className="bg-primary text-primary-foreground">
                 <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:text-xs [&>th]:font-semibold [&>th]:uppercase [&>th]:tracking-wide">
                   <th className="w-14" aria-label="Image" />
                   <th>Add-on</th>
+                  <th>Category</th>
                   <th className="text-right">Price</th>
                   <th>Status</th>
                   <th className="text-right">Actions</th>
@@ -167,6 +192,7 @@ export default function Addons() {
                         {[a.sku && `SKU ${a.sku}`, a.description].filter(Boolean).join(' · ') || <span className="italic">no details</span>}
                       </p>
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground">{a.menuCategory?.name ?? <span className="italic text-xs">Any</span>}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{money(a.price)}</td>
                     <td className="px-4 py-3">
                       <span className={cn('inline-flex whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide', a.isActive ? 'border-success/40 text-success' : 'border-muted-foreground/30 text-muted-foreground')}>
@@ -179,8 +205,8 @@ export default function Addons() {
                         <button onClick={() => void toggleActive(a)} disabled={busy} title={a.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-2 hover:bg-muted', a.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-4" /></button>
                         <button
                           onClick={() => void remove(a)}
-                          disabled={a._count.orderItems > 0 || a._count.menuItems > 0 || a._count.groupLinks > 0}
-                          title={a._count.orderItems > 0 || a._count.menuItems > 0 || a._count.groupLinks > 0 ? "In use — deactivate instead" : "Delete"}
+                          disabled={a._count.orderItems > 0}
+                          title={a._count.orderItems > 0 ? 'On an order — deactivate instead' : 'Delete'}
                           className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
                         >
                           <LuTrash2 className="size-4" />
@@ -209,6 +235,13 @@ export default function Addons() {
                 <Field label="Price (KSh)" required><input required type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} className="input" /></Field>
                 <Field label="SKU"><input placeholder="Optional" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} className="input" /></Field>
               </div>
+              <Field label="Menu category">
+                <select value={form.menuCategoryId} onChange={(e) => setForm({ ...form, menuCategoryId: e.target.value })} className="input">
+                  <option value="">Any — shows for every item</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">The POS add-on picker opens filtered to the menu item's category.</span>
+              </Field>
               <Field label="Description"><input placeholder="Optional" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input" /></Field>
               <Field label="Image URL">
                 <input type="url" placeholder="https://…" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} className="input" />
