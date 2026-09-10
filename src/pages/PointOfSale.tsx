@@ -379,20 +379,20 @@ export default function PointOfSale() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-7xl px-6 py-6 sm:px-8 sm:py-8 lg:px-10">
       <div className="relative">
         <div className="pointer-events-none absolute -bottom-2 left-3 right-1 top-2 rotate-[0.6deg] rounded-sm border border-black/10 bg-white/70" aria-hidden="true" />
         <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-[#f2921a] shadow-lg" aria-hidden="true" />
         <div
-          className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-5 py-4 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)]"
+          className="relative flex flex-wrap items-center justify-between gap-2.5 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-4 py-3 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)] sm:gap-3 sm:px-5 sm:py-4"
           style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(2,6,23,0.055) 28px)' }}
         >
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Checkout</p>
-            <h1 className="mt-1 font-display text-2xl font-semibold text-slate-900">Point of Sale</h1>
+            <h1 className="mt-0.5 font-display text-sm font-semibold text-slate-900 sm:mt-1 sm:text-2xl">Point of Sale</h1>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
-            <span className="flex items-center gap-1.5"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-600 sm:gap-4">
+            <span className="hidden items-center gap-1.5 sm:flex"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
             <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
             {fixedLocation ? (
               <span className="flex items-center gap-1.5"><LuMapPin className="size-3.5" /> {fixedLocation.name}</span>
@@ -422,7 +422,7 @@ export default function PointOfSale() {
         </div>
       )}
 
-      <div className="mt-6 flex w-fit flex-wrap gap-2.5">
+      <div className="mt-4 flex w-fit flex-wrap gap-2.5 sm:mt-6">
         {([
           ['NEW', 'New Sale', <LuPlus key="i" className="size-4" />],
           ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`, <LuClipboardList key="i" className="size-4" />],
@@ -444,7 +444,7 @@ export default function PointOfSale() {
       </div>
 
       {tab === 'ACTIVE' ? (
-        <section className="mt-6">
+        <section className="mt-4 sm:mt-6">
           {activeOrdersLoading ? (
             <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading active orders…</div>
           ) : activeOrders.length === 0 ? (
@@ -470,7 +470,7 @@ export default function PointOfSale() {
           )}
         </section>
       ) : (
-        <div className="mt-6 grid gap-0 lg:grid-cols-[minmax(0,1fr)_24px_360px]">
+        <div className="mt-4 grid gap-0 sm:mt-6 lg:grid-cols-[minmax(0,1fr)_24px_360px]">
           <section>
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <label className="relative flex-1">
@@ -525,7 +525,11 @@ export default function PointOfSale() {
               ) : (
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
                   {visibleItems.map((item) => {
-                    const priceFrom = item.variants.length > 0 ? Math.min(...item.variants.map((v) => v.price)) : item.price
+                    const badge = (
+                      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>
+                        {justAdded === item.id ? <LuCheck className="size-4" /> : needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}
+                      </span>
+                    )
                     return (
                       <button key={item.id} onClick={() => onItemClick(item)} className={cn('group relative overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
                         <div className="flex items-start justify-between gap-2">
@@ -534,14 +538,29 @@ export default function PointOfSale() {
                         </div>
                         <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground sm:min-h-10">{item.description || item.category.name}</p>
-                        <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
-                          <span className="truncate text-base font-bold text-foreground sm:text-lg">{item.variants.length > 0 ? `from ${formatKes(priceFrom)}` : formatKes(item.price)}</span>
-                          <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
-                        </div>
-                        {needsCustomize(item, allAddons.length) && (
-                          <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">
-                            {[item.variants.length > 0 && 'Options', item.allowsAddons && allAddons.length > 0 && 'Add-ons'].filter(Boolean).join(' · ')}
-                          </span>
+
+                        {item.variants.length > 0 ? (
+                          <div className="mt-3 flex items-end justify-between gap-3 border-t pt-3 sm:mt-4 sm:pt-4">
+                            <ul className="min-w-0 flex-1 space-y-0.5 text-[11px] leading-tight">
+                              {item.variants.slice(0, 4).map((v) => (
+                                <li key={v.id} className="flex justify-between gap-2">
+                                  <span className="truncate text-muted-foreground">{v.name}</span>
+                                  <span className="shrink-0 font-semibold text-foreground">{formatKes(v.price)}</span>
+                                </li>
+                              ))}
+                              {item.variants.length > 4 && <li className="text-[10px] text-muted-foreground">+{item.variants.length - 4} more</li>}
+                            </ul>
+                            {badge}
+                          </div>
+                        ) : (
+                          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3 sm:mt-4 sm:pt-4">
+                            <span className="whitespace-nowrap text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
+                            <span className="ml-auto">{badge}</span>
+                          </div>
+                        )}
+
+                        {item.allowsAddons && allAddons.length > 0 && (
+                          <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">Add-ons</span>
                         )}
                       </button>
                     )

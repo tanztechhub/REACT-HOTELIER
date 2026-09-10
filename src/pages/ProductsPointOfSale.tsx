@@ -139,21 +139,21 @@ export default function ProductsPointOfSale() {
   }
 
   return (
-    <div className="mx-auto grid min-h-full max-w-7xl gap-0 px-6 py-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_24px_360px] lg:px-10">
+    <div className="mx-auto grid min-h-full max-w-7xl gap-0 px-6 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,1fr)_24px_360px] lg:px-10">
       <section>
         <div className="relative">
           <div className="pointer-events-none absolute -bottom-2 left-3 right-1 top-2 rotate-[0.6deg] rounded-sm border border-black/10 bg-white/70" aria-hidden="true" />
           <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-[#f2921a] shadow-lg" aria-hidden="true" />
           <div
-            className="relative flex flex-wrap items-center justify-between gap-3 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-5 py-4 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)]"
+            className="relative flex flex-wrap items-center justify-between gap-2.5 overflow-hidden rounded-sm border border-black/10 bg-[#faf7f0] px-4 py-3 text-slate-800 shadow-[0_1px_1px_rgba(2,6,23,0.05),0_3px_5px_rgba(2,6,23,0.06),0_12px_22px_-8px_rgba(2,6,23,0.18)] sm:gap-3 sm:px-5 sm:py-4"
             style={{ backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0, transparent 27px, rgba(2,6,23,0.055) 28px)' }}
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Checkout</p>
-              <h1 className="mt-1 font-display text-2xl font-semibold text-slate-900">Products POS</h1>
+              <h1 className="mt-0.5 font-display text-sm font-semibold text-slate-900 sm:mt-1 sm:text-2xl">Products POS</h1>
             </div>
-            <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-600">
-              <span className="flex items-center gap-1.5"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-slate-600 sm:gap-4">
+              <span className="hidden items-center gap-1.5 sm:flex"><LuBuilding2 className="size-3.5" /> {profile?.businessName ?? '—'}</span>
               <span className="flex items-center gap-1.5"><LuUserRound className="size-3.5" /> {user ? `${user.firstName} ${user.lastName}` : '—'}</span>
               {fixedLocation ? (
                 <span className="flex items-center gap-1.5"><LuMapPin className="size-3.5" /> {fixedLocation.name}</span>
@@ -221,9 +221,9 @@ export default function ProductsPointOfSale() {
                     </div>
                     <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
                     <p className="mt-1 text-xs text-muted-foreground">{item.availableQuantity - inCart} {item.unit} left</p>
-                    <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
-                      <span className="truncate text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
-                      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : <LuPlus />}</span>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-t pt-3 sm:mt-4 sm:pt-4">
+                      <span className="whitespace-nowrap text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
+                      <span className={cn('ml-auto flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : <LuPlus />}</span>
                     </div>
                   </button>
                 )
