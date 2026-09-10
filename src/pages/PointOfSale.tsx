@@ -169,6 +169,10 @@ export default function PointOfSale() {
   const [cart, setCart] = useState<CartLine[]>([])
   const [customizing, setCustomizing] = useState<MenuItem | null>(null)
   const [editingLine, setEditingLine] = useState<CartLine | null>(null)
+  // Brief "added" pulse on a menu card — the cart is off-screen (below) on
+  // mobile, so a one-click add otherwise looks like nothing happened.
+  const [justAdded, setJustAdded] = useState<string | null>(null)
+  const addedTimer = useRef<number | undefined>(undefined)
   const [tableId, setTableId] = useState('')
   const [party, setParty] = useState<SaleParty>({ kind: 'WALK_IN' })
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
@@ -285,7 +289,12 @@ export default function PointOfSale() {
   function onItemClick(item: MenuItem) {
     if (needsCustomize(item, allAddons.length)) { setCustomizing(item); return }
     addConfiguredLine(item, null, [], 1)
+    setJustAdded(item.id)
+    window.clearTimeout(addedTimer.current)
+    addedTimer.current = window.setTimeout(() => setJustAdded(null), 850)
   }
+
+  useEffect(() => () => window.clearTimeout(addedTimer.current), [])
 
   function changeQuantity(key: string, change: number) {
     setCart((current) => current.flatMap((line) => {
@@ -518,7 +527,7 @@ export default function PointOfSale() {
                   {visibleItems.map((item) => {
                     const priceFrom = item.variants.length > 0 ? Math.min(...item.variants.map((v) => v.price)) : item.price
                     return (
-                      <button key={item.id} onClick={() => onItemClick(item)} className="group relative overflow-hidden rounded-sm border border-border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5">
+                      <button key={item.id} onClick={() => onItemClick(item)} className={cn('group relative overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
                         <div className="flex items-start justify-between gap-2">
                           <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-sm sm:size-11', item.temperature === 'HOT' ? 'bg-warning/15 text-warning' : item.temperature === 'COLD' ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent')}><LuCoffee className="size-5" /></span>
                           <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category.name}</span>
@@ -527,7 +536,7 @@ export default function PointOfSale() {
                         <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground sm:min-h-10">{item.description || item.category.name}</p>
                         <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
                           <span className="truncate text-base font-bold text-foreground sm:text-lg">{item.variants.length > 0 ? `from ${formatKes(priceFrom)}` : formatKes(item.price)}</span>
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110">{needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
+                          <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
                         </div>
                         {needsCustomize(item, allAddons.length) && (
                           <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">

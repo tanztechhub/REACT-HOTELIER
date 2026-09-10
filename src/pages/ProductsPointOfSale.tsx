@@ -57,6 +57,9 @@ export default function ProductsPointOfSale() {
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<CreatedOrder | null>(null)
   const [showCheckout, setShowCheckout] = useState(false)
+  // Brief "added" pulse — the cart sits below the grid on mobile.
+  const [justAdded, setJustAdded] = useState<string | null>(null)
+  const addedTimer = useRef<number | undefined>(undefined)
 
   // Pinned to exactly one location → fixed. Pinned to several → pick from
   // just those. Pinned to none → pick from all.
@@ -115,7 +118,12 @@ export default function ProductsPointOfSale() {
       }
       return item.availableQuantity > 0 ? [...current, { ...item, quantity: 1 }] : current
     })
+    setJustAdded(item.id)
+    window.clearTimeout(addedTimer.current)
+    addedTimer.current = window.setTimeout(() => setJustAdded(null), 850)
   }
+
+  useEffect(() => () => window.clearTimeout(addedTimer.current), [])
 
   function changeQuantity(id: string, change: number) {
     setCart((current) => current.flatMap((item) => {
@@ -206,7 +214,7 @@ export default function ProductsPointOfSale() {
                 const inCart = cart.find((c) => c.id === item.id)?.quantity ?? 0
                 const soldOut = inCart >= item.availableQuantity
                 return (
-                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className="group relative overflow-hidden rounded-sm border border-border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm sm:p-5">
+                  <button key={item.id} onClick={() => addItem(item)} disabled={soldOut} className={cn('group relative overflow-hidden rounded-sm border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-sm sm:p-5', justAdded === item.id ? 'border-[#f2921a] ring-2 ring-[#f2921a]/40' : 'border-border')}>
                     <div className="flex items-start justify-between gap-2">
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-accent/10 text-accent sm:size-11"><LuPackage className="size-5" /></span>
                       <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category?.name ?? 'Uncategorized'}</span>
@@ -215,7 +223,7 @@ export default function ProductsPointOfSale() {
                     <p className="mt-1 text-xs text-muted-foreground">{item.availableQuantity - inCart} {item.unit} left</p>
                     <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
                       <span className="truncate text-base font-bold text-foreground sm:text-lg">{formatKes(item.price)}</span>
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110"><LuPlus /></span>
+                      <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-sm text-lg shadow-md transition group-hover:scale-110', justAdded === item.id ? 'scale-110 bg-[#f2921a] text-white' : 'bg-accent text-accent-foreground')}>{justAdded === item.id ? <LuCheck className="size-4" /> : <LuPlus />}</span>
                     </div>
                   </button>
                 )

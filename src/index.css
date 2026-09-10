@@ -164,6 +164,19 @@
     color-scheme: light dark;
   }
 
+  /* The app owns its own scrolling: AppShell is a fixed-height column and the
+     <main> pane is the only scroll container (its bar is hidden). Pinning the
+     document to the viewport stops a stray body/root scrollbar from eating a
+     strip off the right edge on mobile, which reads as the page being
+     off-centre. */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   body {
     margin: 0;
     background: var(--color-background);
