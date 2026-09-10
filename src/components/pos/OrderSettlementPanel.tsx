@@ -5,6 +5,7 @@ import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import CustomerSelectModal, { type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from './OrderReceipt'
+import { printReceipt } from '@/lib/receipt'
 
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type CheckedInStay = { id: string; reservationNo: string; customer: { firstName: string; lastName: string | null }; room: { number: string } }
@@ -388,7 +389,7 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReceipt(false) }}>
           <div className="max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-sm bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b p-3 print:hidden">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuPrinter className="size-3.5" /> Print</button>
+              <button onClick={printReceipt} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuPrinter className="size-3.5" /> Print</button>
               <button onClick={() => setShowReceipt(false)} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuX className="size-4" /></button>
             </div>
             <OrderReceipt order={order} profile={profile} />

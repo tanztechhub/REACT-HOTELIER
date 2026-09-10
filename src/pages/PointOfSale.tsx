@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   LuBan, LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
-  LuPause, LuPencil, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
+  LuPause, LuPencil, LuPlus, LuPrinter, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
@@ -10,6 +10,7 @@ import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { cn } from '@/lib/utils'
 import CustomerSelectModal, { partyLabel, type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
+import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
 import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 
 type ApiVariant = { id: string; name: string; price: string | number; sku: string | null }
@@ -204,6 +205,7 @@ export default function PointOfSale() {
   const [cancelledLoading, setCancelledLoading] = useState(false)
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
+  const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null)
 
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId, needsChoice: needsLocationChoice } = useWorkingLocation(locations)
 
@@ -537,6 +539,7 @@ export default function PointOfSale() {
                   <p className="mt-1 text-xs text-muted-foreground">{order.table?.label ?? 'Takeaway'}</p>
                   <p className="mt-3 text-lg font-bold">{formatKes(order.total)}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
+                    <button onClick={() => setReceiptOrderId(order.id)} title="Receipt" className="inline-flex items-center justify-center rounded-sm border p-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"><LuPrinter className="size-3.5" /></button>
                     <button onClick={() => setAddItemsOrder(order)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Manage</button>
                     <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuReceiptText className="size-3.5" /> Complete & Pay</button>
                   </div>
@@ -854,6 +857,14 @@ export default function PointOfSale() {
           onClose={() => setAddItemsOrder(null)}
           onRefresh={() => void loadActiveOrders()}
           onAdded={() => { setAddItemsOrder(null); void loadActiveOrders() }}
+        />
+      )}
+
+      {receiptOrderId && (
+        <ReceiptPreviewModal
+          orderId={receiptOrderId}
+          profile={profile as ReceiptProfile}
+          onClose={() => setReceiptOrderId(null)}
         />
       )}
     </div>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { LuLoaderCircle, LuShieldCheck } from 'react-icons/lu'
+import { LuLoaderCircle, LuPrinter, LuShieldCheck } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import { getReceiptWidth, setReceiptWidth, type ReceiptWidth } from '@/lib/receipt'
 
 type LicenseStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED'
 type License = {
@@ -107,16 +108,59 @@ function Tile({ label, value, mono, children }: { label: string; value?: string;
   )
 }
 
+function ReceiptPrinter() {
+  const [width, setWidth] = useState<ReceiptWidth>(getReceiptWidth)
+
+  function choose(w: ReceiptWidth) {
+    setWidth(w)
+    setReceiptWidth(w)
+  }
+
+  return (
+    <section className="mt-6 rounded-sm border border-border bg-card p-6 shadow-sm">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-8 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuPrinter className="size-4" /></span>
+        <div>
+          <h2 className="font-semibold text-foreground">Receipt printer</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Applies to Print on every receipt (POS, Active Orders, Receipts).</p>
+        </div>
+      </div>
+
+      <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper width</p>
+      <div className="mt-2 flex gap-2">
+        {(['58mm', '80mm'] as const).map((w) => (
+          <button
+            key={w}
+            type="button"
+            onClick={() => choose(w)}
+            className={cn(
+              'rounded-sm border px-4 py-2 text-sm font-semibold transition',
+              width === w ? 'border-secondary bg-secondary/10 text-secondary' : 'hover:bg-muted',
+            )}
+          >
+            {w}
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-4 max-w-xl text-xs text-muted-foreground">
+        Printing uses the browser print dialog, so any thermal printer installed on this device (USB with a driver, Wi-Fi, or “Save as PDF”) works. Direct silent printing to a Bluetooth thermal printer is coming in a later update.
+      </p>
+    </section>
+  )
+}
+
 export default function CafeSettings() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 lg:px-10">
       <header className="mb-8">
         <p className="text-sm font-medium text-secondary">Settings</p>
         <h1 className="mt-1 font-display text-2xl font-semibold text-foreground">System Settings</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">License and subscription details for this workspace.</p>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">License, subscription, and device settings for this workspace.</p>
       </header>
 
       <LicenseAndSubscription />
+      <ReceiptPrinter />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
+import { printReceipt } from '@/lib/receipt'
 
 type ReceiptRow = ReceiptOrder & { total: number; paid: number }
 type LocationOption = { id: string; name: string }
@@ -124,7 +125,7 @@ export default function Receipts() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null) }}>
           <div className="max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-sm bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b p-3 print:hidden">
-              <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuPrinter className="size-3.5" /> Print</button>
+              <button onClick={printReceipt} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuPrinter className="size-3.5" /> Print</button>
               <button onClick={() => setSelected(null)} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuX className="size-4" /></button>
             </div>
             <OrderReceipt order={selected} profile={profile} />
