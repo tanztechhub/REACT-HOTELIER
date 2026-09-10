@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
-  LuPause, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
+  LuPause, LuPencil, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useAppSelector } from '@/store/hooks'
@@ -165,6 +165,7 @@ export default function PointOfSale() {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
   const [customizing, setCustomizing] = useState<MenuItem | null>(null)
+  const [editingLine, setEditingLine] = useState<CartLine | null>(null)
   const [tableId, setTableId] = useState('')
   const [party, setParty] = useState<SaleParty>({ kind: 'WALK_IN' })
   const [customerModalOpen, setCustomerModalOpen] = useState(false)
@@ -293,6 +294,11 @@ export default function PointOfSale() {
 
   function removeLine(key: string) {
     setCart((current) => current.filter((line) => line.key !== key))
+  }
+
+  // Re-configure an existing cart line in place (size / add-ons / quantity).
+  function replaceCartLine(key: string, variant: Variant | null, addons: Addon[], quantity: number) {
+    setCart((current) => current.map((line) => (line.key === key ? { ...line, variant, addons, quantity } : line)))
   }
 
   function resetSale() {
@@ -443,7 +449,7 @@ export default function PointOfSale() {
                   <p className="mt-1 text-xs text-muted-foreground">{order.table?.label ?? 'Takeaway'}</p>
                   <p className="mt-3 text-lg font-bold">{formatKes(order.total)}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    <button onClick={() => setAddItemsOrder(order)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPlus className="size-3.5" /> Add items</button>
+                    <button onClick={() => setAddItemsOrder(order)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Manage</button>
                     <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuReceiptText className="size-3.5" /> Complete & Pay</button>
                   </div>
                 </article>
@@ -505,20 +511,20 @@ export default function PointOfSale() {
               ) : visibleItems.length === 0 ? (
                 <div className="rounded-sm border border-dashed p-10 text-center text-sm text-muted-foreground">No menu items match this view.</div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
                   {visibleItems.map((item) => {
                     const priceFrom = item.variants.length > 0 ? Math.min(...item.variants.map((v) => v.price)) : item.price
                     return (
-                      <button key={item.id} onClick={() => onItemClick(item)} className="group relative overflow-hidden rounded-sm border border-border bg-card p-5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl">
-                        <div className="flex items-start justify-between">
-                          <span className={cn('flex size-11 items-center justify-center rounded-sm', item.temperature === 'HOT' ? 'bg-warning/15 text-warning' : item.temperature === 'COLD' ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent')}><LuCoffee className="size-5" /></span>
-                          <span className="rounded-sm bg-muted px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category.name}</span>
+                      <button key={item.id} onClick={() => onItemClick(item)} className="group relative overflow-hidden rounded-sm border border-border bg-card p-3.5 text-left shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-xl sm:p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-sm sm:size-11', item.temperature === 'HOT' ? 'bg-warning/15 text-warning' : item.temperature === 'COLD' ? 'bg-secondary/10 text-secondary' : 'bg-accent/10 text-accent')}><LuCoffee className="size-5" /></span>
+                          <span className="max-w-[55%] truncate rounded-sm bg-muted px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">{item.category.name}</span>
                         </div>
-                        <h2 className="mt-5 text-base font-semibold text-foreground">{item.name}</h2>
-                        <p className="mt-1 min-h-10 text-xs leading-5 text-muted-foreground">{item.description || item.category.name}</p>
-                        <div className="mt-4 flex items-center justify-between border-t pt-4">
-                          <span className="text-lg font-bold text-foreground">{item.variants.length > 0 ? `from ${formatKes(priceFrom)}` : formatKes(item.price)}</span>
-                          <span className="flex size-8 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110">{needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
+                        <h2 className="mt-3 line-clamp-2 text-sm font-semibold text-foreground sm:mt-5 sm:text-base">{item.name}</h2>
+                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground sm:min-h-10">{item.description || item.category.name}</p>
+                        <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
+                          <span className="truncate text-base font-bold text-foreground sm:text-lg">{item.variants.length > 0 ? `from ${formatKes(priceFrom)}` : formatKes(item.price)}</span>
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-accent text-lg text-accent-foreground shadow-md transition group-hover:scale-110">{needsCustomize(item, allAddons.length) ? <LuSlidersHorizontal className="size-4" /> : <LuPlus />}</span>
                         </div>
                         {needsCustomize(item, allAddons.length) && (
                           <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">
@@ -613,7 +619,12 @@ export default function PointOfSale() {
                             {line.variant && <p className="text-xs font-medium text-secondary">{line.variant.name}</p>}
                             <p className="text-xs text-muted-foreground">{line.quantity} × {formatKes(line.variant?.price ?? line.item.price)}</p>
                           </div>
-                          <button onClick={() => removeLine(line.key)} className="shrink-0 text-muted-foreground hover:text-destructive"><LuTrash2 className="size-4" /></button>
+                          <div className="flex shrink-0 items-start gap-1">
+                            {needsCustomize(line.item, allAddons.length) && (
+                              <button onClick={() => setEditingLine(line)} title="Change size / add-ons" className="text-muted-foreground hover:text-secondary"><LuPencil className="size-3.5" /></button>
+                            )}
+                            <button onClick={() => removeLine(line.key)} title="Remove" className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-4" /></button>
+                          </div>
                         </div>
                         {line.addons.length > 0 && (
                           <ul className="mt-2 space-y-0.5 border-t pt-2 text-[11px] text-muted-foreground">
@@ -678,7 +689,17 @@ export default function PointOfSale() {
           item={customizing}
           allAddons={allAddons}
           onClose={() => setCustomizing(null)}
-          onAdd={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
+          onSubmit={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
+        />
+      )}
+
+      {editingLine && (
+        <CustomizeModal
+          item={editingLine.item}
+          allAddons={allAddons}
+          initial={{ variantId: editingLine.variant?.id ?? null, addonIds: editingLine.addons.map((a) => a.id), quantity: editingLine.quantity }}
+          onClose={() => setEditingLine(null)}
+          onSubmit={(variant, addons, quantity) => { replaceCartLine(editingLine.key, variant, addons, quantity); setEditingLine(null) }}
         />
       )}
 
@@ -703,6 +724,7 @@ export default function PointOfSale() {
           menuItems={menuItems}
           allAddons={allAddons}
           onClose={() => setAddItemsOrder(null)}
+          onRefresh={() => void loadActiveOrders()}
           onAdded={() => { setAddItemsOrder(null); void loadActiveOrders() }}
         />
       )}
@@ -713,16 +735,19 @@ export default function PointOfSale() {
 /** The options step: pick a variant (size/option) if the item has any, then
  * attach add-ons from the flat catalog. The add-on list is filtered by menu
  * category (defaulting to the item's own), or "All". Tap to add, × to remove.
- * Shown whenever the item has variants or the catalog has add-ons. */
-function CustomizeModal({ item, allAddons, onClose, onAdd }: {
+ * Shown whenever the item has variants or the catalog has add-ons. Passing
+ * `initial` opens it pre-filled to edit an existing line (CTA reads Update). */
+function CustomizeModal({ item, allAddons, initial, onClose, onSubmit }: {
   item: MenuItem
   allAddons: CatalogAddon[]
+  initial?: { variantId: string | null; addonIds: string[]; quantity: number }
   onClose: () => void
-  onAdd: (variant: Variant | null, addons: Addon[], quantity: number) => void
+  onSubmit: (variant: Variant | null, addons: Addon[], quantity: number) => void
 }) {
-  const [variantId, setVariantId] = useState(item.variants[0]?.id ?? '')
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [quantity, setQuantity] = useState(1)
+  const [variantId, setVariantId] = useState(initial?.variantId ?? item.variants[0]?.id ?? '')
+  const [selectedIds, setSelectedIds] = useState<string[]>(initial?.addonIds ?? [])
+  const [quantity, setQuantity] = useState(initial?.quantity ?? 1)
+  const editing = !!initial
 
   // Category chips: "All" + every distinct category present in the catalog.
   const catOptions = useMemo(() => {
@@ -844,10 +869,10 @@ function CustomizeModal({ item, allAddons, onClose, onAdd }: {
           </div>
           <button
             disabled={!canAdd}
-            onClick={() => onAdd(variant, chosenAddons, quantity)}
+            onClick={() => onSubmit(variant, chosenAddons, quantity)}
             className="inline-flex flex-1 items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <LuPlus className="size-4" /> Add · {formatKes(unitPrice * quantity)}
+            {editing ? <LuCheck className="size-4" /> : <LuPlus className="size-4" />} {editing ? 'Update' : 'Add'} · {formatKes(unitPrice * quantity)}
           </button>
         </div>
       </div>
@@ -855,33 +880,61 @@ function CustomizeModal({ item, allAddons, onClose, onAdd }: {
   )
 }
 
-/** Appends more rounds to an order already in progress — same menu and the
- * same options step, a lighter-weight cart, no table/customer fields since
- * the order already has those. Posts to /pos/orders/:id/items. */
-function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
+
+/** Manage an order already in progress: change or remove lines that are on it
+ * (size / add-ons / quantity), and ring up more. Line edits go straight to
+ * the server (PATCH/DELETE /pos/orders/:id/items/:itemId); the "adding" list
+ * is batched and POSTed on "Add to order". */
+type ExistingLine = {
+  id: string
+  menuItemId: string | null
+  quantity: number
+  unitPrice: number
+  menuItemName: string
+  variantId: string | null
+  variantName: string | null
+  addons: { id: string; name: string; price: number }[]
+}
+
+function AddItemsModal({ order, menuItems, allAddons, onClose, onRefresh, onAdded }: {
   order: ActiveOrder
   menuItems: MenuItem[]
   allAddons: CatalogAddon[]
   onClose: () => void
+  onRefresh: () => void
   onAdded: () => void
 }) {
   const [search, setSearch] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
   const [customizing, setCustomizing] = useState<MenuItem | null>(null)
-  const [existingItems, setExistingItems] = useState<{ id: string; name: string; variant: string | null; quantity: number; addons: string[] }[]>([])
+  const [editingNew, setEditingNew] = useState<CartLine | null>(null)
+  const [editingExisting, setEditingExisting] = useState<ExistingLine | null>(null)
+  const [existing, setExisting] = useState<ExistingLine[]>([])
+  const [busyId, setBusyId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  // What the customer already has on this order — shown read-only so the
-  // cashier isn't ringing up a fresh round blind.
-  useEffect(() => {
-    api<{ order: { items: { id: string; quantity: number; menuItem: { name: string }; variant: { name: string } | null; addons: { addon: { name: string } }[] }[] } }>(`/pos/orders/${order.id}`)
-      .then((r) => setExistingItems(r.order.items.map((i) => ({ id: i.id, name: i.menuItem.name, variant: i.variant?.name ?? null, quantity: i.quantity, addons: i.addons.map((a) => a.addon.name) }))))
-      .catch(() => setExistingItems([]))
-  }, [order.id])
+  const menuById = useMemo(() => new Map(menuItems.map((m) => [m.id, m])), [menuItems])
+
+  async function loadExisting() {
+    try {
+      const r = await api<{ order: { items: { id: string; menuItemId: string | null; quantity: number; unitPrice: string | number; menuItem: { name: string } | null; variant: { id: string; name: string } | null; addons: { addon: { id: string; name: string; price: string | number } }[] }[] } }>(`/pos/orders/${order.id}`)
+      setExisting(r.order.items.map((i) => ({
+        id: i.id,
+        menuItemId: i.menuItemId,
+        quantity: i.quantity,
+        unitPrice: toNumber(i.unitPrice),
+        menuItemName: i.menuItem?.name ?? 'Item',
+        variantId: i.variant?.id ?? null,
+        variantName: i.variant?.name ?? null,
+        addons: i.addons.map((a) => ({ id: a.addon.id, name: a.addon.name, price: toNumber(a.addon.price) })),
+      })))
+    } catch { setExisting([]) }
+  }
+  useEffect(() => { void loadExisting() }, [order.id])
 
   const visibleItems = menuItems.filter((item) => !search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase()))
-  const total = cart.reduce((sum, line) => sum + lineTotal(line), 0)
+  const addingTotal = cart.reduce((sum, line) => sum + lineTotal(line), 0)
 
   function addConfiguredLine(item: MenuItem, variant: Variant | null, addons: Addon[], quantity: number) {
     setCart((current) => {
@@ -891,13 +944,16 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
       return [...current, { key: crypto.randomUUID(), item, variant, addons, quantity }]
     })
   }
+  function replaceNewLine(key: string, variant: Variant | null, addons: Addon[], quantity: number) {
+    setCart((current) => current.map((line) => (line.key === key ? { ...line, variant, addons, quantity } : line)))
+  }
 
   function onItemClick(item: MenuItem) {
     if (needsCustomize(item, allAddons.length)) { setCustomizing(item); return }
     addConfiguredLine(item, null, [], 1)
   }
 
-  function changeQuantity(key: string, change: number) {
+  function changeNewQty(key: string, change: number) {
     setCart((current) => current.flatMap((line) => {
       if (line.key !== key) return [line]
       const quantity = line.quantity + change
@@ -905,10 +961,40 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
     }))
   }
 
-  async function submit() {
+  async function patchExisting(line: ExistingLine, body: { variantId?: string | null; quantity?: number; addons?: { addonId: string; quantity: number }[] }) {
+    setBusyId(line.id); setError('')
+    try {
+      await api(`/pos/orders/${order.id}/items/${line.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      await loadExisting()
+      onRefresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not update this line')
+    } finally { setBusyId(null) }
+  }
+
+  async function removeExisting(line: ExistingLine) {
+    if (!window.confirm(`Remove ${line.quantity}× ${line.menuItemName} from this order?`)) return
+    setBusyId(line.id); setError('')
+    try {
+      await api(`/pos/orders/${order.id}/items/${line.id}`, { method: 'DELETE' })
+      await loadExisting()
+      onRefresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not remove this line')
+    } finally { setBusyId(null) }
+  }
+
+  function editExisting(line: ExistingLine) {
+    if (!line.menuItemId || !menuById.has(line.menuItemId)) {
+      setError('That item is no longer on the menu — remove and re-add it instead.')
+      return
+    }
+    setEditingExisting(line)
+  }
+
+  async function submitAdds() {
     if (!cart.length || submitting) return
-    setSubmitting(true)
-    setError('')
+    setSubmitting(true); setError('')
     try {
       await api(`/pos/orders/${order.id}/items`, {
         method: 'POST',
@@ -922,24 +1008,26 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
     }
   }
 
+  const editingExistingItem = editingExisting?.menuItemId ? menuById.get(editingExisting.menuItemId) ?? null : null
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <div className="grid max-h-[88vh] w-full max-w-3xl grid-rows-[auto_1fr_auto] overflow-hidden rounded-sm border bg-card shadow-2xl">
         <div className="flex items-center justify-between border-b p-4">
           <div>
             <p className="text-sm font-semibold text-secondary">Order #{order.orderNumber}</p>
-            <h2 className="font-display text-xl font-semibold">Add items</h2>
+            <h2 className="font-display text-xl font-semibold">Manage order</h2>
           </div>
           <button onClick={onClose} className="rounded-sm p-2 text-muted-foreground hover:bg-muted"><LuX /></button>
         </div>
 
         {error && <div className="mx-4 mt-3 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
 
-        <div className="grid gap-0 overflow-hidden lg:grid-cols-[1fr_300px]">
+        <div className="grid gap-0 overflow-hidden lg:grid-cols-[1fr_320px]">
           <div className="overflow-y-auto p-4">
             <label className="relative block">
               <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu…" className="w-full rounded-sm border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search menu to add…" className="w-full rounded-sm border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
             </label>
             <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
               {visibleItems.map((item) => (
@@ -956,51 +1044,70 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
           </div>
 
           <div className="flex flex-col overflow-y-auto border-t bg-muted/20 p-4 lg:border-l lg:border-t-0">
-            {existingItems.length > 0 && (
-              <div className="mb-3 border-b pb-3">
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">On this order now</p>
-                <div className="space-y-1">
-                  {existingItems.map((i) => (
-                    <p key={i.id} className="truncate text-xs text-muted-foreground">
-                      <span className="font-semibold text-foreground">{i.quantity}&times;</span> {i.name}{i.variant ? ` (${i.variant})` : ''}
-                      {i.addons.length > 0 && ` · ${i.addons.join(', ')}`}
-                    </p>
-                  ))}
-                </div>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">On this order</p>
+            {existing.length === 0 ? (
+              <p className="text-center text-xs text-muted-foreground">No lines yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {existing.map((line) => {
+                  const hasVariants = !!line.menuItemId && (menuById.get(line.menuItemId)?.variants.length ?? 0) > 0
+                  const canEdit = hasVariants || allAddons.length > 0
+                  return (
+                    <div key={line.id} className={cn('rounded-sm border bg-card p-2.5', busyId === line.id && 'opacity-50')}>
+                      <div className="flex justify-between gap-2 text-sm">
+                        <span className="min-w-0 truncate font-medium">{line.quantity}&times; {line.menuItemName}{line.variantName ? ` · ${line.variantName}` : ''}</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {canEdit && <button disabled={busyId === line.id} onClick={() => editExisting(line)} title="Change size / add-ons" className="text-muted-foreground hover:text-secondary"><LuPencil className="size-3.5" /></button>}
+                          <button disabled={busyId === line.id} onClick={() => void removeExisting(line)} title="Remove line" className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+                        </div>
+                      </div>
+                      {line.addons.length > 0 && <p className="mt-1 text-[10px] text-muted-foreground">{line.addons.map((a) => a.name).join(', ')}</p>}
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <button disabled={busyId === line.id || line.quantity <= 1} onClick={() => void patchExisting(line, { quantity: line.quantity - 1 })} className="rounded-sm border bg-background p-1 disabled:opacity-30"><LuMinus className="size-3" /></button>
+                        <span className="w-5 text-center text-xs font-medium">{line.quantity}</span>
+                        <button disabled={busyId === line.id} onClick={() => void patchExisting(line, { quantity: line.quantity + 1 })} className="rounded-sm border bg-background p-1"><LuPlus className="size-3" /></button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
-            {existingItems.length > 0 && <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Adding</p>}
-            {cart.length === 0 ? (
-              <p className="text-center text-xs text-muted-foreground">No items added yet.</p>
-            ) : (
-              <div className="space-y-2.5">
-                {cart.map((line) => (
-                  <div key={line.key} className="rounded-sm border bg-card p-2.5">
-                    <div className="flex justify-between gap-2 text-sm">
-                      <span className="min-w-0 truncate font-medium">{line.item.name}{line.variant ? ` · ${line.variant.name}` : ''}</span>
-                      <button onClick={() => changeQuantity(line.key, -line.quantity)} className="shrink-0 text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
-                    </div>
-                    {line.addons.length > 0 && <p className="mt-1 text-[10px] text-muted-foreground">{line.addons.map((a) => a.name).join(', ')}</p>}
-                    <div className="mt-1.5 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <button onClick={() => changeQuantity(line.key, -1)} className="rounded-sm border bg-background p-1"><LuMinus className="size-3" /></button>
-                        <span className="w-5 text-center text-xs font-medium">{line.quantity}</span>
-                        <button onClick={() => changeQuantity(line.key, 1)} className="rounded-sm border bg-background p-1"><LuPlus className="size-3" /></button>
+
+            {cart.length > 0 && (
+              <>
+                <p className="mb-1.5 mt-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Adding</p>
+                <div className="space-y-2">
+                  {cart.map((line) => (
+                    <div key={line.key} className="rounded-sm border border-accent/40 bg-accent/5 p-2.5">
+                      <div className="flex justify-between gap-2 text-sm">
+                        <span className="min-w-0 truncate font-medium">{line.item.name}{line.variant ? ` · ${line.variant.name}` : ''}</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {needsCustomize(line.item, allAddons.length) && <button onClick={() => setEditingNew(line)} title="Change size / add-ons" className="text-muted-foreground hover:text-secondary"><LuPencil className="size-3.5" /></button>}
+                          <button onClick={() => changeNewQty(line.key, -line.quantity)} className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+                        </div>
                       </div>
-                      <span className="text-xs font-semibold">{formatKes(lineTotal(line))}</span>
+                      {line.addons.length > 0 && <p className="mt-1 text-[10px] text-muted-foreground">{line.addons.map((a) => a.name).join(', ')}</p>}
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => changeNewQty(line.key, -1)} className="rounded-sm border bg-background p-1"><LuMinus className="size-3" /></button>
+                          <span className="w-5 text-center text-xs font-medium">{line.quantity}</span>
+                          <button onClick={() => changeNewQty(line.key, 1)} className="rounded-sm border bg-background p-1"><LuPlus className="size-3" /></button>
+                        </div>
+                        <span className="text-xs font-semibold">{formatKes(lineTotal(line))}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t p-4">
-          <span className="text-sm font-semibold">Adding: {formatKes(total)}</span>
+          <span className="text-sm font-semibold">{cart.length > 0 ? `Adding: ${formatKes(addingTotal)}` : 'Line changes save as you make them'}</span>
           <div className="flex gap-2">
-            <button onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
-            <button disabled={!cart.length || submitting} onClick={() => void submit()} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            <button onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Done</button>
+            <button disabled={!cart.length || submitting} onClick={() => void submitAdds()} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
               {submitting && <LuLoaderCircle className="animate-spin" />} Add to order
             </button>
           </div>
@@ -1012,7 +1119,31 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
           item={customizing}
           allAddons={allAddons}
           onClose={() => setCustomizing(null)}
-          onAdd={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
+          onSubmit={(variant, addons, quantity) => { addConfiguredLine(customizing, variant, addons, quantity); setCustomizing(null) }}
+        />
+      )}
+
+      {editingNew && (
+        <CustomizeModal
+          item={editingNew.item}
+          allAddons={allAddons}
+          initial={{ variantId: editingNew.variant?.id ?? null, addonIds: editingNew.addons.map((a) => a.id), quantity: editingNew.quantity }}
+          onClose={() => setEditingNew(null)}
+          onSubmit={(variant, addons, quantity) => { replaceNewLine(editingNew.key, variant, addons, quantity); setEditingNew(null) }}
+        />
+      )}
+
+      {editingExisting && editingExistingItem && (
+        <CustomizeModal
+          item={editingExistingItem}
+          allAddons={allAddons}
+          initial={{ variantId: editingExisting.variantId, addonIds: editingExisting.addons.map((a) => a.id), quantity: editingExisting.quantity }}
+          onClose={() => setEditingExisting(null)}
+          onSubmit={(variant, addons, quantity) => {
+            const target = editingExisting
+            setEditingExisting(null)
+            void patchExisting(target, { variantId: variant?.id ?? null, quantity, addons: addons.map((a) => ({ addonId: a.id, quantity: 1 })) })
+          }}
         />
       )}
     </div>
