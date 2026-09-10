@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
+  LuBan, LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
   LuPause, LuPencil, LuPlus, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
@@ -66,6 +66,14 @@ type ReadyNotification = { type: 'ORDER_READY'; message: string; order: { id: st
 type HeldSale = { key: string; label: string; tableId: string; discount: string; notes: string; cart: CartLine[] }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type ActiveOrder = { id: string; orderNumber: number; status: string; total: number; customer: { firstName: string; lastName: string | null } | null; table: { label: string } | null }
+type CancelledOrder = ActiveOrder & {
+  statusBeforeCancel: string | null
+  cancelReason: string | null
+  cancelRequestedAt: string | null
+  cancelDecidedAt: string | null
+  cancelDecisionNote: string | null
+  items: { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }[]
+}
 
 const NON_FINAL_STATUSES = ['OPEN', 'PREPARING', 'READY', 'SERVED']
 
@@ -154,7 +162,7 @@ function computeFinancials(cart: CartLine[], discountInput: string) {
 
 export default function PointOfSale() {
   const user = useAppSelector((s) => s.auth.user)
-  const [tab, setTab] = useState<'NEW' | 'ACTIVE'>('NEW')
+  const [tab, setTab] = useState<'NEW' | 'ACTIVE' | 'CANCELLED'>('NEW')
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [allAddons, setAllAddons] = useState<CatalogAddon[]>([])
   const [tables, setTables] = useState<RestaurantTable[]>([])
@@ -186,6 +194,8 @@ export default function PointOfSale() {
 
   const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([])
   const [activeOrdersLoading, setActiveOrdersLoading] = useState(false)
+  const [cancelledOrders, setCancelledOrders] = useState<CancelledOrder[]>([])
+  const [cancelledLoading, setCancelledLoading] = useState(false)
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
 
@@ -225,6 +235,22 @@ export default function PointOfSale() {
     }
   }
 
+  async function loadCancelledOrders() {
+    setCancelledLoading(true)
+    try {
+      const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
+      const [cancelled, pending] = await Promise.all([
+        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=CANCELLED${query}`),
+        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=PENDING_CANCELLATION${query}`),
+      ])
+      setCancelledOrders([...(pending.orders ?? []), ...(cancelled.orders ?? [])])
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load cancelled orders')
+    } finally {
+      setCancelledLoading(false)
+    }
+  }
+
   async function loadPos() {
     setLoading(true)
     setError('')
@@ -254,6 +280,7 @@ export default function PointOfSale() {
 
   useEffect(() => { void loadPos() }, [])
   useEffect(() => { if (!loading) { void loadMenuItems(); void loadTables(); void loadActiveOrders() } }, [effectiveLocationId])
+  useEffect(() => { if (tab === 'CANCELLED') void loadCancelledOrders() }, [tab, effectiveLocationId])
   useEffect(() => {
     async function loadReady() {
       try { const response = await api<{ notifications: ReadyNotification[] }>('/pos/orders/ready'); setReadyOrders(response.notifications) } catch { /* Main POS error handling remains with menu and checkout actions. */ }
@@ -426,6 +453,7 @@ export default function PointOfSale() {
         {([
           ['NEW', 'New Sale', <LuPlus key="i" className="size-4" />],
           ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`, <LuClipboardList key="i" className="size-4" />],
+          ['CANCELLED', 'Cancelled', <LuBan key="i" className="size-4" />],
         ] as const).map(([value, label, icon]) => (
           <button
             key={value}
@@ -443,7 +471,41 @@ export default function PointOfSale() {
         ))}
       </div>
 
-      {tab === 'ACTIVE' ? (
+      {tab === 'CANCELLED' ? (
+        <section className="mt-4 sm:mt-6">
+          {cancelledLoading ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
+          ) : cancelledOrders.length === 0 ? (
+            <div className="rounded-sm border border-dashed p-10 text-center text-sm text-muted-foreground">No cancelled orders.</div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {cancelledOrders.map((order) => {
+                const pending = order.status === 'PENDING_CANCELLATION'
+                return (
+                  <article key={order.id} className="rounded-sm border bg-card p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold">Order #{order.orderNumber}</h3>
+                      <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', pending ? 'bg-warning/15 text-warning' : 'bg-destructive/10 text-destructive')}>
+                        {pending ? 'Awaiting approval' : 'Cancelled'}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><LuUserRound className="size-3.5" /> {order.customer ? `${order.customer.firstName} ${order.customer.lastName ?? ''}` : 'Walk-in'} · {order.table?.label ?? 'Takeaway'}</p>
+                    <p className="mt-2 text-lg font-bold">{formatKes(order.total)}</p>
+                    {order.items.length > 0 && (
+                      <p className="mt-2 text-xs text-muted-foreground">{order.items.map((i) => `${i.quantity}× ${i.menuItem?.name ?? 'item'}${i.variant ? ` (${i.variant.name})` : ''}`).join(' · ')}</p>
+                    )}
+                    <div className="mt-3 rounded-sm bg-muted/40 p-2.5">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Reason</p>
+                      <p className="mt-0.5 text-xs">{order.cancelReason || <span className="italic text-muted-foreground">—</span>}</p>
+                      {order.cancelDecisionNote && <p className="mt-1 text-[11px] text-muted-foreground">Admin note: {order.cancelDecisionNote}</p>}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      ) : tab === 'ACTIVE' ? (
         <section className="mt-4 sm:mt-6">
           {activeOrdersLoading ? (
             <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading active orders…</div>
@@ -470,8 +532,8 @@ export default function PointOfSale() {
           )}
         </section>
       ) : (
-        <div className="mt-4 grid gap-0 sm:mt-6 lg:grid-cols-[minmax(0,1fr)_24px_360px]">
-          <section>
+        <div className="mt-4 grid grid-cols-1 gap-0 sm:mt-6 lg:grid-cols-[minmax(0,1fr)_24px_360px]">
+          <section className="min-w-0">
             <div className="flex flex-col gap-2.5 sm:flex-row">
               <label className="relative flex-1">
                 <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -574,7 +636,7 @@ export default function PointOfSale() {
             <span className="absolute bottom-0 left-1/2 block size-3 -translate-x-1/2 -translate-y-1.5 rounded-full bg-secondary" />
           </div>
 
-          <aside className="mt-8 flex h-fit flex-col gap-3 lg:mt-0">
+          <aside className="mt-8 flex h-fit min-w-0 flex-col gap-3 lg:mt-0">
             {heldSales.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {heldSales.map((held) => (

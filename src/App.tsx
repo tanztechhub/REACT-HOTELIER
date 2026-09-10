@@ -26,6 +26,7 @@ import Addons from "@/pages/Addons";
 import Tables from "@/pages/Tables";
 import Reports from "@/pages/Reports";
 import Receipts from "@/pages/Receipts";
+import Approvals from "@/pages/Approvals";
 import Locations from "@/pages/Locations";
 import ThemeCustomizer from "@/pages/ThemeCustomizer";
 import Customers from "@/pages/Customers";
@@ -184,6 +185,7 @@ function App() {
         <Route path="/menu/items" element={<MenuItems />} />
         <Route path="/menu/addons" element={<Addons />} />
         <Route path="/sales/tables" element={<Tables />} />
+        <Route path="/sales/approvals" element={<Approvals />} />
         <Route path="/sales/receipts" element={<Receipts />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/business-information" element={<BusinessInformation />} />

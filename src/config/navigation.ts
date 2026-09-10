@@ -1,5 +1,6 @@
 import type { IconType } from 'react-icons'
 import {
+  LuBadgeCheck,
   LuLayoutDashboard,
   LuLogIn,
   LuBedDouble,
@@ -115,6 +116,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Point of Sale', href: '/pos', icon: LuShoppingCart, moduleKey: 'POS' },
       { label: 'Products POS', href: '/sales/products-pos', icon: LuPackage },
+      { label: 'Approvals', href: '/sales/approvals', icon: LuBadgeCheck },
       { label: 'Receipts', href: '/sales/receipts', icon: LuReceiptText },
       { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
       { label: 'Customers', href: '/sales/customers', icon: LuUsers },

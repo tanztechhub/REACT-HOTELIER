@@ -45,6 +45,9 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
   const [stays, setStays] = useState<CheckedInStay[]>([])
   const [reservationId, setReservationId] = useState('')
   const [paying, setPaying] = useState(false)
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
 
   const selectedMethod = paymentMethods.find((m) => m.id === paymentMethodId)
   const selectedStay = stays.find((s) => s.id === reservationId)
@@ -81,15 +84,20 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
     return () => window.clearTimeout(timer)
   }, [mode, staySearch])
 
-  async function cancelOrder() {
-    if (!order || !window.confirm(`Cancel order #${order.orderNumber}?`)) return
+  async function requestCancellation() {
+    if (!order) return
+    const reason = cancelReason.trim()
+    if (reason.length < 3) { setError('Give a reason for the cancellation'); return }
     setError('')
+    setCancelling(true)
     try {
-      await api(`/pos/orders/${order.id}/cancel`, { method: 'PATCH' })
+      await api(`/pos/orders/${order.id}/cancel`, { method: 'PATCH', body: JSON.stringify({ reason }) })
       onChanged()
       onClose()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not cancel this order')
+      setError(cause instanceof Error ? cause.message : 'Could not submit the cancellation')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -197,8 +205,27 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 <LuReceiptText className="size-4" /> {order.status === 'COMPLETED' ? 'View receipt' : 'Preview bill'}
               </button>
 
-              {['OPEN', 'PREPARING', 'READY'].includes(order.status) && (
-                <button onClick={() => void cancelOrder()} className="mt-2 w-full rounded-sm border border-destructive/30 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10">Cancel order</button>
+              {order.status === 'PENDING_CANCELLATION' ? (
+                <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 p-3 text-center text-xs font-semibold text-warning">Cancellation requested — waiting for an admin to approve.</p>
+              ) : !['COMPLETED', 'CANCELLED'].includes(order.status) && (
+                cancelOpen ? (
+                  <div className="mt-2 space-y-2 rounded-sm border border-destructive/30 p-3">
+                    <label className="block text-xs font-semibold text-destructive">Reason for cancelling</label>
+                    <textarea
+                      autoFocus rows={2} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="e.g. customer left, wrong order rung up…"
+                      className="w-full rounded-sm border bg-background px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <div className="flex gap-2">
+                      <button onClick={() => { setCancelOpen(false); setCancelReason('') }} className="flex-1 rounded-sm border py-2 text-xs font-semibold hover:bg-muted">Back</button>
+                      <button disabled={cancelling} onClick={() => void requestCancellation()} className="flex-1 rounded-sm bg-destructive py-2 text-xs font-bold text-destructive-foreground disabled:opacity-50">
+                        {cancelling ? 'Submitting…' : 'Submit for approval'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setCancelOpen(true)} className="mt-2 w-full rounded-sm border border-destructive/30 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10">Request cancellation</button>
+                )
               )}
 
               {order.status === 'SERVED' && remaining > 0 && (
