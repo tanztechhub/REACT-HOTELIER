@@ -31,6 +31,7 @@ type ApiMenuItem = {
   temperature: 'HOT' | 'COLD' | 'OTHER'
   category: { id: string; name: string }
   variants: ApiVariant[]
+  allowsAddons: boolean
   taxRate: string | number | null
   taxMode: TaxMode | null
   taxTreatment: TaxTreatment | null
@@ -53,6 +54,7 @@ type MenuItem = {
   temperature: 'HOT' | 'COLD' | 'OTHER'
   category: { id: string; name: string }
   variants: Variant[]
+  allowsAddons: boolean
   tax: LineTax
 }
 // One configured line in the sale: an item, the chosen variant (size/option)
@@ -81,6 +83,7 @@ function normalizeMenuItem(raw: ApiMenuItem): MenuItem {
     // Tolerate a shape drift between a deployed API and this bundle — a
     // missing list should degrade, not crash the whole POS.
     variants: (raw.variants ?? []).map((v) => ({ id: v.id, name: v.name, price: toNumber(v.price) })),
+    allowsAddons: raw.allowsAddons ?? false,
     tax: {
       rate: raw.taxRate != null ? toNumber(raw.taxRate) : 0,
       mode: raw.taxMode ?? 'INCLUSIVE',
@@ -95,9 +98,9 @@ const taxLabel = (t: LineTax) =>
     : `VAT ${t.rate}%${t.mode === 'INCLUSIVE' ? ' (incl)' : ''}`
 
 /** Whether tapping the item opens the options step: it has sizes to pick, or
- * there are add-ons in the catalog to attach. Otherwise it drops straight
- * onto the cart. */
-const needsCustomize = (item: MenuItem, addonCount: number) => item.variants.length > 0 || addonCount > 0
+ * it's flagged as taking add-ons and the catalog has some. Otherwise it drops
+ * straight onto the cart. */
+const needsCustomize = (item: MenuItem, addonCount: number) => item.variants.length > 0 || (item.allowsAddons && addonCount > 0)
 
 /** Same item + same variant + same multiset of add-ons is the same line. */
 const configKey = (itemId: string, variantId: string | null, addonIds: string[]) =>
@@ -528,7 +531,7 @@ export default function PointOfSale() {
                         </div>
                         {needsCustomize(item, allAddons.length) && (
                           <span className="mt-2 block text-[10px] font-semibold uppercase tracking-wide text-accent">
-                            {[item.variants.length > 0 && 'Options', allAddons.length > 0 && 'Add-ons'].filter(Boolean).join(' · ')}
+                            {[item.variants.length > 0 && 'Options', item.allowsAddons && allAddons.length > 0 && 'Add-ons'].filter(Boolean).join(' · ')}
                           </span>
                         )}
                       </button>
@@ -801,7 +804,7 @@ function CustomizeModal({ item, allAddons, initial, onClose, onSubmit }: {
             </fieldset>
           )}
 
-          {allAddons.length > 0 && (
+          {item.allowsAddons && allAddons.length > 0 && (
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <p className="text-sm font-semibold">Add-ons</p>
@@ -1050,8 +1053,8 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onRefresh, onAdde
             ) : (
               <div className="space-y-2">
                 {existing.map((line) => {
-                  const hasVariants = !!line.menuItemId && (menuById.get(line.menuItemId)?.variants.length ?? 0) > 0
-                  const canEdit = hasVariants || allAddons.length > 0
+                  const mi = line.menuItemId ? menuById.get(line.menuItemId) : undefined
+                  const canEdit = (mi?.variants.length ?? 0) > 0 || (!!mi?.allowsAddons && allAddons.length > 0)
                   return (
                     <div key={line.id} className={cn('rounded-sm border bg-card p-2.5', busyId === line.id && 'opacity-50')}>
                       <div className="flex justify-between gap-2 text-sm">

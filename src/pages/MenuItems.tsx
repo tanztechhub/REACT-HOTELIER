@@ -44,6 +44,7 @@ type MenuItem = {
   photoUrl: string | null
   temperature: Temperature
   isVegetarian: boolean
+  allowsAddons: boolean
   isActive: boolean
   isAvailable: boolean
   sortOrder: number
@@ -105,13 +106,14 @@ type Form = {
   photoUrl: string
   temperature: Temperature
   isVegetarian: boolean
+  allowsAddons: boolean
   isActive: boolean
   isAvailable: boolean
   locationIds: string[]
 }
 const emptyForm: Form = {
   name: '', shortName: '', menuCategoryId: '', description: '', sku: '', price: '', taxChoice: 'INHERIT', taxRate: '',
-  photoUrl: '', temperature: 'OTHER', isVegetarian: false, isActive: true, isAvailable: true, locationIds: [],
+  photoUrl: '', temperature: 'OTHER', isVegetarian: false, allowsAddons: false, isActive: true, isAvailable: true, locationIds: [],
 }
 
 const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
@@ -193,6 +195,7 @@ export default function MenuItems() {
       photoUrl: item.photoUrl ?? '',
       temperature: item.temperature,
       isVegetarian: item.isVegetarian,
+      allowsAddons: item.allowsAddons,
       isActive: item.isActive,
       isAvailable: item.isAvailable,
       locationIds: item.locations.map((l) => l.id),
@@ -219,6 +222,7 @@ export default function MenuItems() {
         photoUrl: form.photoUrl.trim() || undefined,
         temperature: form.temperature,
         isVegetarian: form.isVegetarian,
+        allowsAddons: form.allowsAddons,
         isActive: form.isActive,
         isAvailable: form.isAvailable,
         locationIds: form.locationIds,
@@ -541,6 +545,7 @@ export default function MenuItems() {
                   ['isActive', 'On the menu', 'Uncheck to hide it entirely'],
                   ['isAvailable', 'Available now', 'Uncheck when temporarily sold out'],
                   ['isVegetarian', 'Vegetarian', ''],
+                  ['allowsAddons', 'Offers add-ons', 'POS asks for add-ons; off = adds straight to the order'],
                 ] as const).map(([key, label, hint]) => (
                   <label key={key} className="flex cursor-pointer items-start gap-2.5 rounded-sm border bg-muted/40 p-3">
                     <input type="checkbox" checked={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.checked })} className="mt-0.5 size-4 accent-secondary" />
