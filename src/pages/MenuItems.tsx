@@ -6,12 +6,14 @@ import {
   LuCircleAlert,
   LuEyeOff,
   LuImageOff,
+  LuLayers,
   LuLoaderCircle,
   LuPencil,
   LuPlus,
   LuPower,
   LuSearch,
   LuTrash2,
+  LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
@@ -38,7 +40,17 @@ type MenuItem = {
   isActive: boolean
   isAvailable: boolean
   sortOrder: number
-  _count: { orderItems: number }
+  _count: { orderItems: number; variants: number }
+}
+
+type Variant = {
+  id: string
+  menuItemId: string
+  name: string
+  sku: string | null
+  price: string
+  isActive: boolean
+  sortOrder: number
 }
 
 type Form = {
@@ -76,6 +88,7 @@ export default function MenuItems() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -309,6 +322,7 @@ export default function MenuItems() {
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{item.menuCategory.name}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">
+                      {item._count.variants > 0 ? <span className="text-xs font-normal text-muted-foreground">from </span> : null}
                       {money(item.price)}
                       {item.taxRate != null && <span className="ml-1 text-xs text-muted-foreground">+{Number(item.taxRate)}%</span>}
                     </td>
@@ -335,6 +349,10 @@ export default function MenuItems() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setVariantsFor(item)} title="Variants (sizes / options)" className="relative rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary">
+                          <LuLayers className="size-4" />
+                          {item._count.variants > 0 && <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-bold leading-4 text-secondary-foreground">{item._count.variants}</span>}
+                        </button>
                         <button onClick={() => openEdit(item)} title="Edit" className="rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-4" /></button>
                         <button
                           onClick={() => void patch(item, { isActive: !item.isActive }, item.isActive ? 'Item deactivated.' : 'Item activated.')}
@@ -430,6 +448,168 @@ export default function MenuItems() {
           </form>
         </div>
       )}
+
+      {variantsFor && (
+        <VariantsModal item={variantsFor} onClose={() => setVariantsFor(null)} onChanged={load} />
+      )}
+    </div>
+  )
+}
+
+function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: () => void; onChanged: () => Promise<void> }) {
+  const toast = useToast()
+  const [variants, setVariants] = useState<Variant[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [draft, setDraft] = useState({ name: '', price: '', sku: '' })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState({ name: '', price: '', sku: '' })
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await api<{ variants: Variant[] }>(`/menu-items/${item.id}/variants`)
+      setVariants(r.variants)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not load variants')
+    } finally {
+      setLoading(false)
+    }
+  }, [item.id, toast])
+  useEffect(() => { void load() }, [load])
+
+  async function add(event: FormEvent) {
+    event.preventDefault()
+    if (!draft.name.trim() || draft.price === '') return
+    setBusy(true)
+    try {
+      await api(`/menu-items/${item.id}/variants`, { method: 'POST', body: JSON.stringify({ name: draft.name.trim(), price: Number(draft.price), sku: draft.sku.trim() || undefined }) })
+      setDraft({ name: '', price: '', sku: '' })
+      await load()
+      await onChanged()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not add variant')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveEdit(id: string) {
+    if (!editDraft.name.trim() || editDraft.price === '') return
+    setBusy(true)
+    try {
+      await api(`/menu-items/${item.id}/variants/${id}`, { method: 'PATCH', body: JSON.stringify({ name: editDraft.name.trim(), price: Number(editDraft.price), sku: editDraft.sku.trim() || undefined }) })
+      setEditingId(null)
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not update variant')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function patchVariant(v: Variant, body: Record<string, unknown>) {
+    setBusy(true)
+    try {
+      await api(`/menu-items/${item.id}/variants/${v.id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not update variant')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeVariant(v: Variant) {
+    if (!window.confirm(`Delete the "${v.name}" variant?`)) return
+    setBusy(true)
+    try {
+      await api(`/menu-items/${item.id}/variants/${v.id}`, { method: 'DELETE' })
+      await load()
+      await onChanged()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not delete variant')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function move(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= variants.length) return
+    const next = [...variants]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setVariants(next)
+    setBusy(true)
+    try {
+      await api(`/menu-items/${item.id}/variants/reorder`, { method: 'POST', body: JSON.stringify({ orderedIds: next.map((v) => v.id) }) })
+    } catch {
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-secondary">Variants</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">{item.name}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Sizes / options with their own price — like Small / Medium / Large. <span className="font-medium text-foreground">Not add-ons.</span></p>
+          </div>
+          <button onClick={onClose} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LuX className="size-4" /></button>
+        </div>
+
+        <form onSubmit={add} className="mt-5 grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+          <label className="text-xs font-medium">Name<input required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Large" className="input mt-1" /></label>
+          <label className="text-xs font-medium">Price<input required type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} className="input mt-1" /></label>
+          <label className="text-xs font-medium">SKU<input value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value })} placeholder="opt." className="input mt-1" /></label>
+          <button disabled={busy || !draft.name.trim() || draft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+        </form>
+
+        <div className="mt-5 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
+          ) : variants.length === 0 ? (
+            <p className="rounded-sm border border-dashed p-4 text-center text-sm text-muted-foreground">No variants — the base price of <span className="font-semibold text-foreground">{money(item.price)}</span> is used.</p>
+          ) : variants.map((v, index) => (
+            <div key={v.id} className={cn('rounded-sm border p-3', !v.isActive && 'opacity-60')}>
+              {editingId === v.id ? (
+                <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+                  <label className="text-xs font-medium">Name<input value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} className="input mt-1" /></label>
+                  <label className="text-xs font-medium">Price<input type="number" min="0" step="0.01" value={editDraft.price} onChange={(e) => setEditDraft({ ...editDraft, price: e.target.value })} className="input mt-1" /></label>
+                  <label className="text-xs font-medium">SKU<input value={editDraft.sku} onChange={(e) => setEditDraft({ ...editDraft, sku: e.target.value })} className="input mt-1" /></label>
+                  <div className="flex gap-1">
+                    <button onClick={() => void saveEdit(v.id)} disabled={busy} className="rounded-sm bg-primary px-2.5 py-2 text-xs font-semibold text-primary-foreground">Save</button>
+                    <button onClick={() => setEditingId(null)} className="rounded-sm border px-2.5 py-2 text-xs font-semibold hover:bg-muted">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col">
+                    <button onClick={() => void move(index, -1)} disabled={busy || index === 0} className="rounded-sm text-muted-foreground hover:bg-muted disabled:opacity-20"><LuChevronUp className="size-3.5" /></button>
+                    <button onClick={() => void move(index, 1)} disabled={busy || index === variants.length - 1} className="rounded-sm text-muted-foreground hover:bg-muted disabled:opacity-20"><LuChevronDown className="size-3.5" /></button>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{v.name}</p>
+                    {v.sku && <p className="text-xs text-muted-foreground">SKU {v.sku}</p>}
+                  </div>
+                  <span className="tabular-nums text-sm font-medium">{money(v.price)}</span>
+                  <button onClick={() => void patchVariant(v, { isActive: !v.isActive })} disabled={busy} title={v.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-1.5 hover:bg-muted', v.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-3.5" /></button>
+                  <button onClick={() => { setEditingId(v.id); setEditDraft({ name: v.name, price: String(Number(v.price)), sku: v.sku ?? '' }) }} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-3.5" /></button>
+                  <button onClick={() => void removeVariant(v)} className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 flex justify-end border-t pt-4">
+          <button onClick={onClose} className="rounded-sm border px-4 py-2 text-sm font-semibold hover:bg-muted">Done</button>
+        </div>
+      </div>
     </div>
   )
 }
