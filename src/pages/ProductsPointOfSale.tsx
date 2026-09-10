@@ -139,8 +139,8 @@ export default function ProductsPointOfSale() {
   }
 
   return (
-    <div className="mx-auto grid min-h-full max-w-7xl gap-0 px-6 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,1fr)_24px_360px] lg:px-10">
-      <section>
+    <div className="mx-auto grid min-h-full max-w-7xl grid-cols-1 gap-0 px-6 py-6 sm:px-8 sm:py-8 lg:grid-cols-[minmax(0,1fr)_24px_360px] lg:px-10">
+      <section className="min-w-0">
         <div className="relative">
           <div className="pointer-events-none absolute -bottom-2 left-3 right-1 top-2 rotate-[0.6deg] rounded-sm border border-black/10 bg-white/70" aria-hidden="true" />
           <div className="pointer-events-none absolute -left-2.5 -top-2.5 size-12 rotate-12 rounded-sm bg-[#f2921a] shadow-lg" aria-hidden="true" />
@@ -241,7 +241,7 @@ export default function ProductsPointOfSale() {
         <span className="absolute bottom-0 left-1/2 block size-3 -translate-x-1/2 -translate-y-1.5 rounded-full bg-secondary" />
       </div>
 
-      <aside className="mt-8 flex h-fit flex-col gap-3 lg:mt-0">
+      <aside className="mt-8 flex h-fit min-w-0 flex-col gap-3 lg:mt-0">
         <div className="flex flex-col rounded-sm border border-border bg-card shadow-sm">
           <div className="flex items-center gap-3 border-b p-4">
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm border border-dashed border-accent px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-accent">
