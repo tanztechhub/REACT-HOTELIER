@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LuBadgeCheck, LuCircleAlert, LuClock3, LuLoaderCircle, LuUserRound, LuX } from 'react-icons/lu'
+import { LuBadgeCheck, LuCircleAlert, LuClock3, LuLoaderCircle, LuReceiptText, LuUserRound, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
+import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
+import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 
 type OrderItem = { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }
 type PendingOrder = {
@@ -33,6 +35,8 @@ export default function Approvals() {
   const toast = useToast()
   const [orders, setOrders] = useState<PendingOrder[]>([])
   const [staff, setStaff] = useState<Record<string, string>>({})
+  const [profile, setProfile] = useState<ReceiptProfile>(null)
+  const [receiptId, setReceiptId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -57,6 +61,7 @@ export default function Approvals() {
     api<{ employees: Employee[] }>('/employees').then((r) => {
       setStaff(Object.fromEntries(r.employees.map((e) => [e.id, `${e.firstName} ${e.lastName ?? ''}`.trim()])))
     }).catch(() => {})
+    api<{ profile: ReceiptProfile }>('/business-profile').then((r) => setProfile(r.profile)).catch(() => {})
   }, [])
 
   async function decide(order: PendingOrder, action: 'approve' | 'reject') {
@@ -146,11 +151,19 @@ export default function Approvals() {
                 >
                   <LuX className="size-4" /> Reject
                 </button>
+                <button
+                  onClick={() => setReceiptId(order.id)}
+                  className="inline-flex items-center gap-1.5 rounded-sm border px-4 py-2 text-sm font-semibold hover:bg-muted"
+                >
+                  <LuReceiptText className="size-4" /> View receipt
+                </button>
               </div>
             </article>
           ))}
         </div>
       )}
+
+      {receiptId && <ReceiptPreviewModal orderId={receiptId} profile={profile} onClose={() => setReceiptId(null)} />}
     </div>
   )
 }

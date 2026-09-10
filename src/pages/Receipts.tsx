@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuReceiptText, LuSearch } from 'react-icons/lu'
+import { LuCircleAlert, LuLoaderCircle, LuReceiptText, LuSearch, LuWallet } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
+import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
 
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID'
 type ReceiptRow = ReceiptOrder & { total: number; paid: number; paymentStatus?: PaymentStatus }
@@ -31,7 +32,8 @@ export default function Receipts() {
   const [payFilter, setPayFilter] = useState<'ALL' | 'OWING' | 'PAID'>('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [receiptId, setReceiptId] = useState<string | null>(null)
+  const [payId, setPayId] = useState<string | null>(null)
 
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
 
@@ -135,7 +137,7 @@ export default function Receipts() {
                   const badge = badgeFor(order)
                   const owed = Math.max(0, order.total - order.paid)
                   return (
-                    <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setSelectedId(order.id)}>
+                    <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setReceiptId(order.id)}>
                       <td className="px-5 py-4 font-semibold">#{order.orderNumber}</td>
                       <td className="px-5 py-4 text-muted-foreground">{order.table?.label ?? 'Takeaway'}</td>
                       <td className="px-5 py-4 text-muted-foreground">{new Date(order.updatedAt).toLocaleString()}</td>
@@ -145,8 +147,13 @@ export default function Receipts() {
                       </td>
                       <td className="px-5 py-4 text-right tabular-nums text-muted-foreground">{formatKes(order.paid)}{owed > 0.01 && <span className="block text-[11px] font-semibold text-warning">owing {formatKes(owed)}</span>}</td>
                       <td className="px-5 py-4 text-right font-semibold">{formatKes(order.total)}</td>
-                      <td className="px-5 py-4 text-right">
-                        <button onClick={(e) => { e.stopPropagation(); setSelectedId(order.id) }} title={owed > 0.01 ? 'View / take payment' : 'View receipt'} className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
+                      <td className="px-5 py-4">
+                        <div className="flex justify-end gap-1">
+                          {owed > 0.01 && (
+                            <button onClick={(e) => { e.stopPropagation(); setPayId(order.id) }} title="Take payment" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuWallet /></button>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); setReceiptId(order.id) }} title="View receipt" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -157,13 +164,17 @@ export default function Receipts() {
         </section>
       )}
 
-      {selectedId && (
+      {receiptId && (
+        <ReceiptPreviewModal orderId={receiptId} profile={profile} onClose={() => setReceiptId(null)} />
+      )}
+
+      {payId && (
         <OrderSettlementPanel
-          orderId={selectedId}
-          title="Receipt"
+          orderId={payId}
+          title="Take payment"
           profile={profile}
           paymentMethods={paymentMethods}
-          onClose={() => setSelectedId(null)}
+          onClose={() => setPayId(null)}
           onChanged={() => void load()}
         />
       )}

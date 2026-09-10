@@ -268,7 +268,7 @@ export default function PointOfSale() {
     setCompletedLoading(true)
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
-      const response = await api<{ orders: CompletedOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED${query}`)
+      const response = await api<{ orders: CompletedOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED&limit=100${query}`)
       setCompletedOrders(response.orders ?? [])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load completed orders')
@@ -559,9 +559,14 @@ export default function PointOfSale() {
                       <p className="mt-2 text-lg font-bold">{formatKes(order.total)}</p>
                       {owed > 0.01 && <p className="text-xs font-semibold text-warning">Owing {formatKes(owed)} · paid {formatKes(order.paid)}</p>}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">
-                          <LuReceiptText className="size-3.5" /> {owed > 0.01 ? 'View / take payment' : 'View receipt'}
+                        <button onClick={() => setReceiptOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">
+                          <LuReceiptText className="size-3.5" /> View receipt
                         </button>
+                        {owed > 0.01 && (
+                          <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
+                            Take payment
+                          </button>
+                        )}
                       </div>
                     </article>
                   )
@@ -569,6 +574,9 @@ export default function PointOfSale() {
               </div>
             )
           })()}
+          {completedOrders.length >= 100 && (
+            <p className="mt-4 text-center text-xs text-muted-foreground">Showing the 100 most recent. Older receipts are on the <span className="font-semibold">Receipts</span> page.</p>
+          )}
         </section>
       ) : tab === 'CANCELLED' ? (
         <section className="mt-4 sm:mt-6">
