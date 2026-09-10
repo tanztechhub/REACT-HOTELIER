@@ -165,12 +165,15 @@
   }
 
   /* The app owns its own scrolling: AppShell is a fixed-height column and the
-     <main> pane is the only scroll container (its bar is hidden). Pinning the
-     document to the viewport stops a stray body/root scrollbar from eating a
-     strip off the right edge on mobile, which reads as the page being
-     off-centre. Pull-to-refresh is re-implemented on <main> in AppShell. */
+     <main> pane is the only scroll container (its bar is hidden). Locking the
+     scroll on #root (not html/body — that upsets the mobile URL bar and the
+     status-bar tint) stops a stray scrollbar from eating a strip off the
+     right edge. Pull-to-refresh is re-implemented on <main> in AppShell. */
   html,
-  body,
+  body {
+    height: 100%;
+  }
+
   #root {
     height: 100%;
     overflow: hidden;

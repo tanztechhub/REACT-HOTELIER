@@ -16,8 +16,8 @@ export default defineConfig({
         name: 'HOTELIER',
         short_name: 'HOTELIER',
         description: 'Modular, multi-tenant hotel management platform by TANZ.',
-        theme_color: '#ffffff',
-        background_color: '#eceef2',
+        theme_color: '#0b1e3d',
+        background_color: '#0b1e3d',
         display: 'standalone',
         start_url: '/',
         icons: [
