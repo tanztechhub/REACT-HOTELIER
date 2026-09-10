@@ -41,6 +41,10 @@ type Product = {
   unit: string
   isPerishable: boolean
   shelfLifeDays: number | null
+  packSize: string | null
+  packLabel: string | null
+  packUnitId: string | null
+  packUnit: { id: string; name: string } | null
   stockByLocation: StockByLocation[]
   totalQuantity: string
   reorderLevel: string
@@ -72,6 +76,9 @@ type ProductForm = {
   unit: (typeof UNITS_OF_MEASURE)[number]
   isPerishable: boolean
   shelfLifeDays: string
+  packLabel: string
+  packSize: string
+  packUnitId: string
   openingStock: string
   locationId: string
   reorderLevel: string
@@ -84,10 +91,21 @@ type ProductForm = {
 const emptyForm: ProductForm = {
   categoryId: '', name: '', sku: '', barcode: '', brand: '', description: '',
   unit: 'Each', isPerishable: false, shelfLifeDays: '',
+  packLabel: '', packSize: '', packUnitId: '',
   openingStock: '0', locationId: '', reorderLevel: '0', maxStockLevel: '', unitCost: '', sellingPrice: '', preferredSupplier: '',
   isActive: true,
 }
 const emptyTransfer = { productId: '', productName: '', fromLocationId: '', toLocationId: '', quantity: '', stockByLocation: [] as StockByLocation[] }
+
+// "7,500 ml (10 bottles)" when pack-tracked, else "7,500 Each".
+function packAndUnit(qty: number, packSize: number, packLabel: string, unitName: string): string {
+  const base = `${qty.toLocaleString()} ${unitName}`
+  if (packSize > 0) {
+    const packs = +(qty / packSize).toFixed(2)
+    return `${base} (${packs.toLocaleString()} ${packLabel ? (packs === 1 ? packLabel : `${packLabel}s`) : 'packs'})`
+  }
+  return base
+}
 
 function SetupMessage() {
   return (
@@ -118,6 +136,7 @@ export default function Products() {
   const [transferring, setTransferring] = useState(false)
   const [transferError, setTransferError] = useState('')
   const [showUnits, setShowUnits] = useState(false)
+  const [units, setUnits] = useState<{ id: string; name: string }[]>([])
 
   const loadProducts = useCallback(async () => {
     setLoading(true)
@@ -147,9 +166,13 @@ export default function Products() {
     api<{ locations: Location[] }>('/locations')
       .then((r) => setLocations(r.locations))
       .catch(() => {})
-  }, [toast])
+    api<{ units: { id: string; name: string }[] }>('/units-of-measure')
+      .then((r) => setUnits(r.units))
+      .catch(() => {})
+  }, [toast, showUnits])
 
   const categoryLabel = useMemo(() => (c: Category) => '— '.repeat(c.level - 1) + c.name, [])
+  const packSizeNum = Number(form.packSize) || 0
 
   function openCreate() {
     setEditing(null)
@@ -171,6 +194,9 @@ export default function Products() {
       unit: product.unit as (typeof UNITS_OF_MEASURE)[number],
       isPerishable: product.isPerishable,
       shelfLifeDays: product.shelfLifeDays?.toString() ?? '',
+      packLabel: product.packLabel ?? '',
+      packSize: product.packSize ?? '',
+      packUnitId: product.packUnitId ?? '',
       openingStock: '0',
       locationId: '',
       reorderLevel: product.reorderLevel,
@@ -410,21 +436,52 @@ export default function Products() {
               </label>
             </FieldGroup>
 
+            <FieldGroup title="Pack / Container">
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                For bar bottles, kegs and cases: say what one pack holds. Stock is then kept in that unit (e.g. ml), and you can enter or view it either as packs or as the raw amount. Leave blank for items you just count.
+              </p>
+              <Field label="Pack label"><input placeholder="e.g. bottle, can, keg" value={form.packLabel} onChange={(e) => setForm({ ...form, packLabel: e.target.value })} className="input" /></Field>
+              <Field label="Contains (per pack)"><input type="number" min="0" step="0.001" placeholder="e.g. 750" value={form.packSize} onChange={(e) => setForm({ ...form, packSize: e.target.value })} className="input" /></Field>
+              <Field label="Measured in" className="sm:col-span-2">
+                <div className="flex gap-2">
+                  <select className="input" value={form.packUnitId} onChange={(e) => setForm({ ...form, packUnitId: e.target.value })}>
+                    <option value="">Select a unit of measure…</option>
+                    {units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setShowUnits(true)} className="shrink-0 rounded-sm border px-3 text-sm font-medium hover:bg-muted">Manage</button>
+                </div>
+              </Field>
+            </FieldGroup>
+
             <FieldGroup title="Stock">
               {editing ? (
                 <>
                   {editing.stockByLocation.map((s) => (
                     <Field key={s.locationId} label={s.locationName}>
-                      <input disabled className="input opacity-70" value={`${Number(s.quantity).toLocaleString()} ${editing.unit}`} />
+                      <input disabled className="input opacity-70" value={packAndUnit(Number(s.quantity), packSizeNum, form.packLabel, editing.packUnit?.name ?? editing.unit)} />
                     </Field>
                   ))}
                   <Field label="Total Stock" className="sm:col-span-2">
-                    <input disabled className="input opacity-70 font-semibold" value={`${Number(editing.totalQuantity).toLocaleString()} ${editing.unit}`} />
+                    <input disabled className="input opacity-70 font-semibold" value={packAndUnit(Number(editing.totalQuantity), packSizeNum, form.packLabel, editing.packUnit?.name ?? editing.unit)} />
                   </Field>
                 </>
               ) : (
                 <>
-                  <Field label="Opening Stock" required><input required type="number" min="0" step="0.001" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} className="input" /></Field>
+                  <Field label="Opening Stock" required>
+                    <input required type="number" min="0" step="0.001" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} className="input" />
+                    {packSizeNum > 0 && (
+                      <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{units.find((u) => u.id === form.packUnitId)?.name ?? form.unit} — or enter</span>
+                        <input
+                          type="number" min="0" step="0.01"
+                          className="input h-8 w-24 text-xs"
+                          value={form.openingStock ? String(+(Number(form.openingStock) / packSizeNum).toFixed(3)) : ''}
+                          onChange={(e) => setForm({ ...form, openingStock: e.target.value ? String(+(Number(e.target.value) * packSizeNum).toFixed(3)) : '0' })}
+                        />
+                        <span>{form.packLabel ? `${form.packLabel}s` : 'packs'}</span>
+                      </div>
+                    )}
+                  </Field>
                   {Number(form.openingStock) > 0 && (
                     <Field label="Received At" required={locations.length !== 1}>
                       <select required={locations.length !== 1} className="input" value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
