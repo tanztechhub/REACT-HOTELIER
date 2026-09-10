@@ -13,7 +13,7 @@ type Addon = {
   sku: string | null
   imageUrl: string | null
   isActive: boolean
-  _count: { orderItems: number; menuItems: number }
+  _count: { orderItems: number; menuItems: number; groupLinks: number }
 }
 type Form = { name: string; description: string; price: string; sku: string; imageUrl: string; isActive: boolean }
 const emptyForm: Form = { name: '', description: '', price: '', sku: '', imageUrl: '', isActive: true }
@@ -179,8 +179,8 @@ export default function Addons() {
                         <button onClick={() => void toggleActive(a)} disabled={busy} title={a.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-2 hover:bg-muted', a.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-4" /></button>
                         <button
                           onClick={() => void remove(a)}
-                          disabled={a._count.orderItems > 0 || a._count.menuItems > 0}
-                          title={a._count.orderItems > 0 || a._count.menuItems > 0 ? 'In use — deactivate instead' : 'Delete'}
+                          disabled={a._count.orderItems > 0 || a._count.menuItems > 0 || a._count.groupLinks > 0}
+                          title={a._count.orderItems > 0 || a._count.menuItems > 0 || a._count.groupLinks > 0 ? "In use — deactivate instead" : "Delete"}
                           className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
                         >
                           <LuTrash2 className="size-4" />

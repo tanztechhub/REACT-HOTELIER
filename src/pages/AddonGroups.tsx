@@ -4,12 +4,14 @@ import {
   LuChevronDown,
   LuChevronUp,
   LuCircleAlert,
+  LuListChecks,
   LuLoaderCircle,
   LuPencil,
   LuPlus,
   LuPower,
   LuSearch,
   LuTrash2,
+  LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
@@ -26,7 +28,16 @@ type AddonGroup = {
   required: boolean
   isActive: boolean
   sortOrder: number
+  _count: { items: number }
 }
+type GroupItem = {
+  id: string
+  addonId: string
+  sortOrder: number
+  isActive: boolean
+  addon: { id: string; name: string; price: string; sku: string | null; isActive: boolean }
+}
+type AddonOption = { id: string; name: string; price: string; isActive: boolean }
 type Form = {
   name: string
   description: string
@@ -63,6 +74,7 @@ export default function AddonGroups() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [manageFor, setManageFor] = useState<AddonGroup | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -246,6 +258,10 @@ export default function AddonGroups() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setManageFor(g)} title="Manage add-ons in this group" className="relative rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary">
+                          <LuListChecks className="size-4" />
+                          {g._count.items > 0 && <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-bold leading-4 text-secondary-foreground">{g._count.items}</span>}
+                        </button>
                         <button onClick={() => openEdit(g)} title="Edit" className="rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-4" /></button>
                         <button onClick={() => void toggleActive(g)} disabled={busy} title={g.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-2 hover:bg-muted', g.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-4" /></button>
                         <button onClick={() => void remove(g)} title="Delete" className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-4" /></button>
@@ -325,6 +341,151 @@ export default function AddonGroups() {
           </form>
         </div>
       )}
+
+      {manageFor && (
+        <GroupItemsModal group={manageFor} onClose={() => setManageFor(null)} onChanged={load} />
+      )}
+    </div>
+  )
+}
+
+function money(v: string | number) {
+  return `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+}
+
+function GroupItemsModal({ group, onClose, onChanged }: { group: AddonGroup; onClose: () => void; onChanged: () => Promise<void> }) {
+  const toast = useToast()
+  const [items, setItems] = useState<GroupItem[]>([])
+  const [addons, setAddons] = useState<AddonOption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [pick, setPick] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [i, a] = await Promise.all([
+        api<{ items: GroupItem[] }>(`/addon-groups/${group.id}/items`),
+        api<{ addons: AddonOption[] }>('/addons?active=true'),
+      ])
+      setItems(i.items)
+      setAddons(a.addons)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not load group add-ons')
+    } finally {
+      setLoading(false)
+    }
+  }, [group.id, toast])
+  useEffect(() => { void load() }, [load])
+
+  const available = useMemo(() => {
+    const inGroup = new Set(items.map((i) => i.addonId))
+    return addons.filter((a) => !inGroup.has(a.id))
+  }, [items, addons])
+
+  async function attach(event: FormEvent) {
+    event.preventDefault()
+    if (!pick) return
+    setBusy(true)
+    try {
+      await api(`/addon-groups/${group.id}/items`, { method: 'POST', body: JSON.stringify({ addonId: pick }) })
+      setPick('')
+      await load()
+      await onChanged()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not add')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggle(it: GroupItem) {
+    setBusy(true)
+    try {
+      await api(`/addon-groups/${group.id}/items/${it.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !it.isActive }) })
+      await load()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not update')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function detach(it: GroupItem) {
+    setBusy(true)
+    try {
+      await api(`/addon-groups/${group.id}/items/${it.id}`, { method: 'DELETE' })
+      await load()
+      await onChanged()
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not remove')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function move(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= items.length) return
+    const next = [...items]
+    ;[next[index], next[target]] = [next[target], next[index]]
+    setItems(next)
+    setBusy(true)
+    try {
+      await api(`/addon-groups/${group.id}/items/reorder`, { method: 'POST', body: JSON.stringify({ orderedIds: next.map((i) => i.id) }) })
+    } catch {
+      await load()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-semibold text-secondary">Add-ons in group</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">{group.name}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Add existing add-ons — this never creates a new one. The same add-on can sit in other groups too.</p>
+          </div>
+          <button onClick={onClose} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LuX className="size-4" /></button>
+        </div>
+
+        <form onSubmit={attach} className="mt-5 flex gap-2">
+          <select value={pick} onChange={(e) => setPick(e.target.value)} className="input flex-1">
+            <option value="">{available.length ? 'Choose an add-on to add…' : 'All active add-ons are already in this group'}</option>
+            {available.map((a) => <option key={a.id} value={a.id}>{a.name} — {money(a.price)}</option>)}
+          </select>
+          <button disabled={busy || !pick} className="rounded-sm bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+        </form>
+
+        <div className="mt-5 space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
+          ) : items.length === 0 ? (
+            <p className="rounded-sm border border-dashed p-4 text-center text-sm text-muted-foreground">No add-ons in this group yet.</p>
+          ) : items.map((it, index) => (
+            <div key={it.id} className={cn('flex items-center gap-2 rounded-sm border p-3', !it.isActive && 'opacity-60')}>
+              <div className="flex flex-col">
+                <button onClick={() => void move(index, -1)} disabled={busy || index === 0} className="rounded-sm text-muted-foreground hover:bg-muted disabled:opacity-20"><LuChevronUp className="size-3.5" /></button>
+                <button onClick={() => void move(index, 1)} disabled={busy || index === items.length - 1} className="rounded-sm text-muted-foreground hover:bg-muted disabled:opacity-20"><LuChevronDown className="size-3.5" /></button>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{it.addon.name}{!it.addon.isActive && <span className="ml-1 text-xs font-normal text-warning">(add-on inactive)</span>}</p>
+                {it.addon.sku && <p className="text-xs text-muted-foreground">SKU {it.addon.sku}</p>}
+              </div>
+              <span className="tabular-nums text-sm font-medium">{money(it.addon.price)}</span>
+              <button onClick={() => void toggle(it)} disabled={busy} title={it.isActive ? 'Disable in this group' : 'Enable in this group'} className={cn('rounded-md p-1.5 hover:bg-muted', it.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-3.5" /></button>
+              <button onClick={() => void detach(it)} disabled={busy} title="Remove from group" className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 flex justify-end border-t pt-4">
+          <button onClick={onClose} className="rounded-sm border px-4 py-2 text-sm font-semibold hover:bg-muted">Done</button>
+        </div>
+      </div>
     </div>
   )
 }
