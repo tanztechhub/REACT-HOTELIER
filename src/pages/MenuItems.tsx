@@ -455,14 +455,16 @@ export default function MenuItems() {
               <Field label="Name" required className="sm:col-span-2"><input required autoFocus placeholder="e.g. Chicken Burger" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input" /></Field>
               <Field label="Short name"><input placeholder="Receipt / KOT label" value={form.shortName} onChange={(e) => setForm({ ...form, shortName: e.target.value })} className="input" /></Field>
               <div className="block text-sm font-medium">
-                Category <span className="text-destructive">*</span>
-                <button
-                  type="button"
-                  onClick={() => setShowCategoryModal(true)}
-                  className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-secondary hover:underline"
-                >
-                  <LuPlus className="size-3.5" /> New category
-                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <span>Category <span className="text-destructive">*</span></span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-secondary hover:underline"
+                  >
+                    <LuPlus className="size-3.5" /> New category
+                  </button>
+                </div>
                 <span className="mt-1.5 block">
                   <SearchableSelect
                     options={categories.map((c) => ({ value: c.id, label: c.name, hint: c.isActive ? undefined : 'inactive' }))}
