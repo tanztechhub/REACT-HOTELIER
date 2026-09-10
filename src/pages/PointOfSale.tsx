@@ -946,7 +946,7 @@ function AddItemsModal({ order, menuItems, allAddons, onClose, onAdded }: {
                 <button key={item.id} onClick={() => onItemClick(item)} className="flex items-center justify-between gap-2 rounded-sm border bg-card p-3 text-left text-sm shadow-sm hover:border-accent/50">
                   <span className="min-w-0 truncate font-medium">{item.name}</span>
                   <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                    {needsCustomize(item) && <LuSlidersHorizontal className="size-3.5 text-accent" />}
+                    {needsCustomize(item, allAddons.length) && <LuSlidersHorizontal className="size-3.5 text-accent" />}
                     {item.variants.length > 0 ? `from ${formatKes(Math.min(...item.variants.map((v) => v.price)))}` : formatKes(item.price)}
                   </span>
                 </button>
