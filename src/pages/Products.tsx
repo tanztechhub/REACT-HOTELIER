@@ -9,6 +9,7 @@ import {
   LuPackage,
   LuPencil,
   LuPlus,
+  LuRuler,
   LuSearch,
   LuTriangleAlert,
   LuTrash2,
@@ -16,6 +17,7 @@ import {
 import { api, hasApiTenant } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
+import UnitsOfMeasureModal from '@/components/UnitsOfMeasureModal'
 
 const UNITS_OF_MEASURE = [
   'Each', 'Pieces', 'Kg', 'Grams', 'Litres', 'Millilitres', 'Box', 'Carton',
@@ -113,6 +115,7 @@ export default function Products() {
   const [showTransfer, setShowTransfer] = useState(false)
   const [transferring, setTransferring] = useState(false)
   const [transferError, setTransferError] = useState('')
+  const [showUnits, setShowUnits] = useState(false)
 
   const loadProducts = useCallback(async () => {
     setLoading(true)
@@ -259,9 +262,14 @@ export default function Products() {
           <h1 className="mt-1 font-display text-3xl font-semibold">Products</h1>
           <p className="mt-2 text-sm text-muted-foreground">Record everything received into the store and track stock on hand.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
-          <LuPlus /> Add product
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowUnits(true)} className="inline-flex items-center justify-center gap-2 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">
+            <LuRuler /> Manage UOM
+          </button>
+          <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/15">
+            <LuPlus /> Add product
+          </button>
+        </div>
       </header>
 
       <section className="mt-7 grid gap-3 sm:grid-cols-4">
@@ -515,6 +523,8 @@ export default function Products() {
           </form>
         </div>
       )}
+
+      <UnitsOfMeasureModal open={showUnits} onClose={() => setShowUnits(false)} />
     </div>
   )
 }

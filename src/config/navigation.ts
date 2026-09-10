@@ -43,7 +43,6 @@ import {
   LuBriefcaseBusiness,
   LuMapPin,
   LuPalette,
-  LuRuler,
   LuHistory,
   LuNetwork,
   LuLayoutGrid,
@@ -200,13 +199,18 @@ export const navigation: NavGroup[] = [
     ],
   },
   {
-    label: 'System',
+    label: 'Business',
     section: 'SYSTEM',
     items: [
       { label: 'Business Information', href: '/business-information', icon: LuBriefcaseBusiness },
-      { label: 'Appearance', href: '/appearance', icon: LuPalette },
       { label: 'Locations', href: '/locations', icon: LuMapPin },
-      { label: 'Units of Measure', href: '/units-of-measure', icon: LuRuler },
+    ],
+  },
+  {
+    label: 'System',
+    section: 'SYSTEM',
+    items: [
+      { label: 'Appearance', href: '/appearance', icon: LuPalette },
       { label: 'Settings', href: '/settings', icon: LuSettings },
     ],
   },

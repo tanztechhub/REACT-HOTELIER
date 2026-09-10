@@ -28,7 +28,7 @@ type AddonGroup = {
   required: boolean
   isActive: boolean
   sortOrder: number
-  _count: { items: number }
+  _count: { items: number; menuItemLinks: number }
 }
 type GroupItem = {
   id: string
@@ -264,7 +264,7 @@ export default function AddonGroups() {
                         </button>
                         <button onClick={() => openEdit(g)} title="Edit" className="rounded-md p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-4" /></button>
                         <button onClick={() => void toggleActive(g)} disabled={busy} title={g.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-2 hover:bg-muted', g.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-4" /></button>
-                        <button onClick={() => void remove(g)} title="Delete" className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-4" /></button>
+                        <button onClick={() => void remove(g)} disabled={g._count.menuItemLinks > 0} title={g._count.menuItemLinks > 0 ? "On a menu item — remove it there first" : "Delete"} className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"><LuTrash2 className="size-4" /></button>
                       </div>
                     </td>
                   </tr>

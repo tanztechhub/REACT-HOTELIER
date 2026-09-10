@@ -32,7 +32,6 @@ import Locations from "@/pages/Locations";
 import ThemeCustomizer from "@/pages/ThemeCustomizer";
 import Customers from "@/pages/Customers";
 import Services from "@/pages/Services";
-import UnitsOfMeasure from "@/pages/UnitsOfMeasure";
 import Stays from "@/pages/Stays";
 import PaymentMethods from "@/pages/PaymentMethods";
 import Transactions from "@/pages/Transactions";
@@ -200,7 +199,6 @@ function App() {
         <Route path="/service-center/customers" element={<Customers />} />
         <Route path="/reception/services" element={<Services />} />
         <Route path="/service-center/services" element={<Services />} />
-        <Route path="/units-of-measure" element={<UnitsOfMeasure />} />
         <Route path="/reception/stays" element={<Stays />} />
         <Route path="/reception/payment-methods" element={<PaymentMethods />} />
         <Route path="/sales/payment-methods" element={<PaymentMethods />} />
