@@ -11,7 +11,8 @@ import { cn } from '@/lib/utils'
 import CustomerSelectModal, { partyLabel, type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
-import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
+import { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
+import { getThermalSettings, printReceipt } from '@/lib/thermalPrinter'
 
 type ApiVariant = { id: string; name: string; price: string | number; sku: string | null }
 type ApiCatalogAddon = {
@@ -395,6 +396,18 @@ export default function PointOfSale() {
     setHeldSales((current) => current.filter((h) => h.key !== key))
   }
 
+  async function autoPrint(orderId: string) {
+    const s = getThermalSettings()
+    if (!s.enabled || !s.autoPrint || s.connection === 'dialog') return
+    try {
+      const { order } = await api<{ order: ReceiptOrder }>(`/pos/orders/${orderId}`)
+      await printReceipt(order, profile as ReceiptProfile)
+      toast.success('Receipt sent to printer')
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Auto-print failed — use the Print button')
+    }
+  }
+
   async function submitOrder() {
     if (!cart.length || submitting) return
     setSubmitting(true)
@@ -423,6 +436,7 @@ export default function PointOfSale() {
       setSentPulse(true)
       window.clearTimeout(sentTimer.current)
       sentTimer.current = window.setTimeout(() => setSentPulse(false), 2000)
+      void autoPrint(response.order.id)
       await loadPos()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not save the order')

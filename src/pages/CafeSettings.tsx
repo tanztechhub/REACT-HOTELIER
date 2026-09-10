@@ -4,7 +4,11 @@ import { LuLoaderCircle, LuPrinter, LuShieldCheck } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
-import { getReceiptWidth, setReceiptWidth, type ReceiptWidth } from '@/lib/receipt'
+import {
+  getThermalSettings, saveThermalSettings, pairUsbPrinter, pairBluetoothPrinter,
+  webUsbAvailable, webBluetoothAvailable, PRINTER_MODELS,
+  type ThermalSettings, type ThermalConnection,
+} from '@/lib/thermalPrinter'
 
 type LicenseStatus = 'TRIAL' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED'
 type License = {
@@ -108,44 +112,126 @@ function Tile({ label, value, mono, children }: { label: string; value?: string;
   )
 }
 
-function ReceiptPrinter() {
-  const [width, setWidth] = useState<ReceiptWidth>(getReceiptWidth)
+const CONNECTIONS: { value: ThermalConnection; label: string }[] = [
+  { value: 'usb', label: 'USB (WebUSB, direct)' },
+  { value: 'bluetooth', label: 'Bluetooth (direct)' },
+  { value: 'dialog', label: 'Browser print dialog' },
+]
 
-  function choose(w: ReceiptWidth) {
-    setWidth(w)
-    setReceiptWidth(w)
+function Label({ children }: { children: ReactNode }) {
+  return <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>
+}
+
+function ReceiptPrinter() {
+  const toast = useToast()
+  const [s, setS] = useState<ThermalSettings>(getThermalSettings)
+  const [pairing, setPairing] = useState(false)
+
+  function patch(next: Partial<ThermalSettings>) {
+    setS(saveThermalSettings(next))
   }
+
+  async function connect() {
+    setPairing(true)
+    try {
+      const name = s.connection === 'bluetooth' ? await pairBluetoothPrinter() : await pairUsbPrinter()
+      patch({ address: name })
+      toast.success(`Connected to ${name}`)
+    } catch (cause) {
+      if (!(cause instanceof DOMException && cause.name === 'NotFoundError')) {
+        toast.error(cause instanceof Error ? cause.message : 'Could not connect to a printer')
+      }
+    } finally {
+      setPairing(false)
+    }
+  }
+
+  const direct = s.connection === 'usb' || s.connection === 'bluetooth'
+  const transportMissing =
+    (s.connection === 'usb' && !webUsbAvailable()) ||
+    (s.connection === 'bluetooth' && !webBluetoothAvailable())
 
   return (
     <section className="mt-6 rounded-sm border border-border bg-card p-6 shadow-sm">
       <div className="flex items-center gap-2.5">
         <span className="flex size-8 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuPrinter className="size-4" /></span>
         <div>
-          <h2 className="font-semibold text-foreground">Receipt printer</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">Applies to Print on every receipt (POS, Active Orders, Receipts).</p>
+          <h2 className="font-semibold text-foreground">Receipt Printer</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Configure the ESC/POS thermal printer used to print receipts at checkout.</p>
         </div>
       </div>
 
-      <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paper width</p>
-      <div className="mt-2 flex gap-2">
-        {(['58mm', '80mm'] as const).map((w) => (
-          <button
-            key={w}
-            type="button"
-            onClick={() => choose(w)}
-            className={cn(
-              'rounded-sm border px-4 py-2 text-sm font-semibold transition',
-              width === w ? 'border-secondary bg-secondary/10 text-secondary' : 'hover:bg-muted',
-            )}
-          >
-            {w}
-          </button>
-        ))}
-      </div>
+      <label className="mt-5 flex cursor-pointer items-start gap-2.5 rounded-sm border bg-muted/40 p-3">
+        <input type="checkbox" checked={s.enabled} onChange={(e) => patch({ enabled: e.target.checked })} className="mt-0.5 size-4 accent-secondary" />
+        <span>
+          <span className="block text-sm font-semibold">Enable receipt printing</span>
+          <span className="block text-xs text-muted-foreground">Turn this off if you don’t have a thermal printer set up yet</span>
+        </span>
+      </label>
 
-      <p className="mt-4 max-w-xl text-xs text-muted-foreground">
-        Printing uses the browser print dialog, so any thermal printer installed on this device (USB with a driver, Wi-Fi, or “Save as PDF”) works. Direct silent printing to a Bluetooth thermal printer is coming in a later update.
-      </p>
+      {s.enabled && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label>Connection type</Label>
+              <select value={s.connection} onChange={(e) => patch({ connection: e.target.value as ThermalConnection })} className="input mt-2">
+                {CONNECTIONS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Printer type</Label>
+              <select value={s.model} onChange={(e) => patch({ model: e.target.value })} className="input mt-2">
+                {PRINTER_MODELS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {direct && (
+            <>
+              <Label>Connected printer</Label>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-sm border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">{s.address || 'None — connect one'}</span>
+                <button
+                  type="button"
+                  onClick={() => void connect()}
+                  disabled={pairing || transportMissing}
+                  className="rounded-sm bg-primary px-3 py-2 text-xs font-bold text-primary-foreground disabled:opacity-50"
+                >
+                  {pairing ? 'Connecting…' : s.address ? 'Reconnect' : `Connect ${s.connection === 'bluetooth' ? 'Bluetooth' : 'USB'} printer`}
+                </button>
+              </div>
+              {transportMissing && (
+                <p className="mt-2 text-xs font-medium text-warning">
+                  This browser can’t use {s.connection === 'bluetooth' ? 'Web Bluetooth' : 'WebUSB'}. Use Chrome or Edge, or switch Connection type to “Browser print dialog”.
+                </p>
+              )}
+            </>
+          )}
+
+          <Label>Paper width (characters per line)</Label>
+          <input
+            type="number" min={24} max={64}
+            value={s.columns}
+            onChange={(e) => patch({ columns: Number(e.target.value) || 48 })}
+            className="input mt-2 max-w-40"
+          />
+          <p className="mt-2 max-w-xl text-xs text-muted-foreground">
+            Content prints at its true size (not shrunk to fit), so setting this too high cuts off the right edge. 32 suits 58&nbsp;mm paper, 48 suits 80&nbsp;mm. The moment a column or a total gets clipped, drop back to the last value that printed cleanly.
+          </p>
+
+          <label className="mt-5 flex cursor-pointer items-start gap-2.5 rounded-sm border bg-muted/40 p-3">
+            <input type="checkbox" checked={s.autoPrint} onChange={(e) => patch({ autoPrint: e.target.checked })} className="mt-0.5 size-4 accent-secondary" />
+            <span>
+              <span className="block text-sm font-semibold">Print automatically after each sale</span>
+              <span className="block text-xs text-muted-foreground">If off, use the Print button on the receipt instead</span>
+            </span>
+          </label>
+
+          <p className="mt-4 max-w-xl text-xs text-muted-foreground">
+            A browser can’t reach a printer that Windows installed with its own driver — WebUSB needs a driverless / WinUSB printer, or a Bluetooth one. If neither fits, “Browser print dialog” prints to any OS printer (with a dialog).
+          </p>
+        </>
+      )}
     </section>
   )
 }

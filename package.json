@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@point-of-sale/receipt-printer-encoder": "^3.0.3",
     "@react-pdf/renderer": "^4.9.0",
     "@reduxjs/toolkit": "^2.12.0",
     "@tailwindcss/vite": "^4.3.3",
@@ -29,6 +30,8 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/w3c-web-usb": "^1.0.14",
+    "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.0.4",
     "oxlint": "^1.75.0",
     "prettier": "^3.9.6",
