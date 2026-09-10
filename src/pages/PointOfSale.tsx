@@ -77,8 +77,10 @@ function normalizeMenuItem(raw: ApiMenuItem): MenuItem {
     description: raw.description,
     price: toNumber(raw.price),
     temperature: raw.temperature,
-    category: raw.category,
-    variants: raw.variants.map((v) => ({ id: v.id, name: v.name, price: toNumber(v.price) })),
+    category: raw.category ?? { id: '', name: 'Uncategorised' },
+    // Tolerate a shape drift between a deployed API and this bundle — a
+    // missing list should degrade, not crash the whole POS.
+    variants: (raw.variants ?? []).map((v) => ({ id: v.id, name: v.name, price: toNumber(v.price) })),
     tax: {
       rate: raw.taxRate != null ? toNumber(raw.taxRate) : 0,
       mode: raw.taxMode ?? 'INCLUSIVE',
@@ -184,7 +186,7 @@ export default function PointOfSale() {
   async function loadMenuItems() {
     const query = effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''
     const menuResponse = await api<{ items: ApiMenuItem[] }>(`/pos/menu-items${query}`)
-    setMenuItems(menuResponse.items.map(normalizeMenuItem))
+    setMenuItems((menuResponse.items ?? []).map(normalizeMenuItem))
   }
 
   // Tables are scoped per location (a Bar shouldn't see a Restaurant's dine-in
@@ -194,10 +196,11 @@ export default function PointOfSale() {
   async function loadTables() {
     const query = effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''
     const response = await api<{ tables: RestaurantTable[] }>(`/tables${query}`)
-    setTables(response.tables)
+    const rows = response.tables ?? []
+    setTables(rows)
     setTableId((current) => {
-      if (response.tables.some((t) => t.id === current)) return current
-      return response.tables.find((t) => t.label.toLowerCase().startsWith('counter'))?.id ?? ''
+      if (rows.some((t) => t.id === current)) return current
+      return rows.find((t) => t.label.toLowerCase().startsWith('counter'))?.id ?? ''
     })
   }
 
@@ -206,7 +209,7 @@ export default function PointOfSale() {
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
       const response = await api<{ orders: ActiveOrder[] }>(`/pos/orders?channel=FOOD${query}`)
-      setActiveOrders(response.orders.filter((o) => NON_FINAL_STATUSES.includes(o.status)))
+      setActiveOrders((response.orders ?? []).filter((o) => NON_FINAL_STATUSES.includes(o.status)))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load active orders')
     } finally {
@@ -225,13 +228,13 @@ export default function PointOfSale() {
         api<{ addons: ApiCatalogAddon[] }>('/pos/addons'),
       ])
       setProfile(profileResponse.profile)
-      setLocations(locationResponse.locations)
+      setLocations(locationResponse.locations ?? [])
       // Room Charge is a system method the backend resolves by code when
       // settling to a folio — it isn't a real "how did they pay" choice.
-      setPaymentMethods(methodsResponse.methods.filter((m) => m.code !== 'ROOM_CHARGE'))
-      setAllAddons(addonResponse.addons.map((a) => ({
+      setPaymentMethods((methodsResponse.methods ?? []).filter((m) => m.code !== 'ROOM_CHARGE'))
+      setAllAddons((addonResponse.addons ?? []).map((a) => ({
         id: a.id, name: a.name, price: toNumber(a.price),
-        categoryId: a.menuCategoryId, categoryName: a.menuCategory?.name ?? null,
+        categoryId: a.menuCategoryId ?? null, categoryName: a.menuCategory?.name ?? null,
       })))
       await Promise.all([loadMenuItems(), loadTables(), loadActiveOrders()])
     } catch (cause) {
