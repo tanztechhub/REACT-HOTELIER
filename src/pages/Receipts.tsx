@@ -1,44 +1,55 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuReceiptText, LuSearch, LuX } from 'react-icons/lu'
+import { LuCircleAlert, LuLoaderCircle, LuReceiptText, LuSearch } from 'react-icons/lu'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { useWorkingLocation } from '@/lib/useWorkingLocation'
-import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
-import { printReceipt } from '@/lib/receipt'
+import { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
+import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 
-type ReceiptRow = ReceiptOrder & { total: number; paid: number }
+type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID'
+type ReceiptRow = ReceiptOrder & { total: number; paid: number; paymentStatus?: PaymentStatus }
 type LocationOption = { id: string; name: string }
+type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 
 const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
+
+const badgeFor = (row: ReceiptRow) => {
+  const owed = Math.max(0, row.total - row.paid)
+  if (row.paymentStatus === 'PAID' || owed <= 0.01) return { label: 'Paid', cls: 'bg-success/10 text-success' }
+  if (row.paymentStatus === 'PARTIAL' || row.paid > 0.01) return { label: 'Part-paid', cls: 'bg-warning/15 text-warning' }
+  return { label: 'On credit', cls: 'bg-destructive/10 text-destructive' }
+}
 
 export default function Receipts() {
   const toast = useToast()
   const [orders, setOrders] = useState<ReceiptRow[]>([])
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [profile, setProfile] = useState<ReceiptProfile>(null)
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [search, setSearch] = useState('')
+  const [payFilter, setPayFilter] = useState<'ALL' | 'OWING' | 'PAID'>('ALL')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selected, setSelected] = useState<ReceiptRow | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
-  // Same convention as Tables.tsx: fixed-location staff only ever see their
-  // own location's sales; a floating manager sees everything by default,
-  // with an optional filter rather than a forced pick.
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
-      const [orderResponse, profileResponse, locationResponse] = await Promise.all([
+      const [orderResponse, profileResponse, locationResponse, methodsResponse] = await Promise.all([
         api<{ orders: ReceiptRow[] }>(`/pos/orders?status=COMPLETED${query}`),
         api<{ profile: ReceiptProfile }>('/business-profile'),
         api<{ locations: LocationOption[] }>('/locations'),
+        api<{ methods: (PaymentMethod & { code: string })[] }>('/payment-methods?activeOnly=true'),
       ])
       setOrders(orderResponse.orders)
       setProfile(profileResponse.profile)
       setLocations(locationResponse.locations)
+      setPaymentMethods(methodsResponse.methods.filter((m) => m.code !== 'ROOM_CHARGE'))
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not load receipts'
       setError(message)
@@ -50,7 +61,12 @@ export default function Receipts() {
 
   useEffect(() => { void load() }, [load])
 
+  const owingCount = orders.filter((o) => Math.max(0, o.total - o.paid) > 0.01).length
+
   const visible = orders.filter((order) => {
+    const owed = Math.max(0, order.total - order.paid) > 0.01
+    if (payFilter === 'OWING' && !owed) return false
+    if (payFilter === 'PAID' && owed) return false
     if (!search.trim()) return true
     const query = search.trim().toLowerCase()
     return String(order.orderNumber).includes(query) || (order.table?.label ?? 'takeaway').toLowerCase().includes(query)
@@ -64,11 +80,22 @@ export default function Receipts() {
         <p className="mt-2 text-sm text-muted-foreground">Every completed sale, with the full itemized breakdown and payment record.</p>
       </header>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <label className="relative block max-w-sm flex-1">
           <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order # or table…" className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" />
         </label>
+        <div className="flex flex-wrap gap-1.5">
+          {([['ALL', 'All'], ['OWING', 'Owing'], ['PAID', 'Fully paid']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              onClick={() => setPayFilter(value)}
+              className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold', payFilter === value ? 'border-secondary bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted')}
+            >
+              {label}{value === 'OWING' && owingCount > 0 && ` (${owingCount})`}
+            </button>
+          ))}
+        </div>
         {!fixedLocation && pickableLocations.length > 0 && (
           <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
             <option value="">All locations</option>
@@ -87,7 +114,7 @@ export default function Receipts() {
       {loading ? (
         <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading receipts…</div>
       ) : visible.length === 0 ? (
-        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No completed sales {search.trim() ? 'match your search' : 'yet'}.</div>
+        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No completed sales {search.trim() || payFilter !== 'ALL' ? 'match this view' : 'yet'}.</div>
       ) : (
         <section className="mt-7 overflow-hidden rounded-sm border bg-card shadow-sm">
           <div className="overflow-x-auto">
@@ -98,39 +125,47 @@ export default function Receipts() {
                   <th className="px-5 py-3">Table</th>
                   <th className="px-5 py-3">Completed</th>
                   <th className="px-5 py-3">Payment</th>
+                  <th className="px-5 py-3 text-right">Paid</th>
                   <th className="px-5 py-3 text-right">Total</th>
                   <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {visible.map((order) => (
-                  <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setSelected(order)}>
-                    <td className="px-5 py-4 font-semibold">#{order.orderNumber}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{order.table?.label ?? 'Takeaway'}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{new Date(order.updatedAt).toLocaleString()}</td>
-                    <td className="px-5 py-4 text-muted-foreground">{[...new Set(order.payments.map((p) => p.paymentMethod.name))].join(', ') || '—'}</td>
-                    <td className="px-5 py-4 text-right font-semibold">{formatKes(order.total)}</td>
-                    <td className="px-5 py-4 text-right">
-                      <button onClick={(e) => { e.stopPropagation(); setSelected(order) }} title="View receipt" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
-                    </td>
-                  </tr>
-                ))}
+                {visible.map((order) => {
+                  const badge = badgeFor(order)
+                  const owed = Math.max(0, order.total - order.paid)
+                  return (
+                    <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setSelectedId(order.id)}>
+                      <td className="px-5 py-4 font-semibold">#{order.orderNumber}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{order.table?.label ?? 'Takeaway'}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{new Date(order.updatedAt).toLocaleString()}</td>
+                      <td className="px-5 py-4">
+                        <span className={cn('inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', badge.cls)}>{badge.label}</span>
+                        <span className="ml-2 text-xs text-muted-foreground">{[...new Set(order.payments.map((p) => p.paymentMethod.name))].join(', ') || '—'}</span>
+                      </td>
+                      <td className="px-5 py-4 text-right tabular-nums text-muted-foreground">{formatKes(order.paid)}{owed > 0.01 && <span className="block text-[11px] font-semibold text-warning">owing {formatKes(owed)}</span>}</td>
+                      <td className="px-5 py-4 text-right font-semibold">{formatKes(order.total)}</td>
+                      <td className="px-5 py-4 text-right">
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedId(order.id) }} title={owed > 0.01 ? 'View / take payment' : 'View receipt'} className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </section>
       )}
 
-      {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null) }}>
-          <div className="max-h-[88vh] w-full max-w-sm overflow-y-auto rounded-sm bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b p-3 print:hidden">
-              <button onClick={printReceipt} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuPrinter className="size-3.5" /> Print</button>
-              <button onClick={() => setSelected(null)} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuX className="size-4" /></button>
-            </div>
-            <OrderReceipt order={selected} profile={profile} />
-          </div>
-        </div>
+      {selectedId && (
+        <OrderSettlementPanel
+          orderId={selectedId}
+          title="Receipt"
+          profile={profile}
+          paymentMethods={paymentMethods}
+          onClose={() => setSelectedId(null)}
+          onChanged={() => void load()}
+        />
       )}
     </div>
   )

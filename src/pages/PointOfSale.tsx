@@ -68,6 +68,7 @@ type ReadyNotification = { type: 'ORDER_READY'; message: string; order: { id: st
 type HeldSale = { key: string; heldNo: number; label: string; tableId: string; discount: string; notes: string; party: SaleParty; cart: CartLine[] }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type ActiveOrder = { id: string; orderNumber: number; status: string; total: number; customer: { firstName: string; lastName: string | null } | null; table: { label: string } | null }
+type CompletedOrder = ActiveOrder & { paid: number; paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID'; updatedAt: string }
 type CancelledOrder = ActiveOrder & {
   statusBeforeCancel: string | null
   cancelReason: string | null
@@ -165,7 +166,7 @@ function computeFinancials(cart: CartLine[], discountInput: string) {
 export default function PointOfSale() {
   const toast = useToast()
   const user = useAppSelector((s) => s.auth.user)
-  const [tab, setTab] = useState<'NEW' | 'ACTIVE' | 'CANCELLED'>('NEW')
+  const [tab, setTab] = useState<'NEW' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'>('NEW')
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [allAddons, setAllAddons] = useState<CatalogAddon[]>([])
   const [tables, setTables] = useState<RestaurantTable[]>([])
@@ -203,6 +204,9 @@ export default function PointOfSale() {
   const [activeOrdersLoading, setActiveOrdersLoading] = useState(false)
   const [cancelledOrders, setCancelledOrders] = useState<CancelledOrder[]>([])
   const [cancelledLoading, setCancelledLoading] = useState(false)
+  const [completedOrders, setCompletedOrders] = useState<CompletedOrder[]>([])
+  const [completedLoading, setCompletedLoading] = useState(false)
+  const [completedFilter, setCompletedFilter] = useState<'ALL' | 'OWING' | 'PAID'>('ALL')
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null)
@@ -259,6 +263,19 @@ export default function PointOfSale() {
     }
   }
 
+  async function loadCompletedOrders() {
+    setCompletedLoading(true)
+    try {
+      const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
+      const response = await api<{ orders: CompletedOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED${query}`)
+      setCompletedOrders(response.orders ?? [])
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load completed orders')
+    } finally {
+      setCompletedLoading(false)
+    }
+  }
+
   async function loadPos() {
     setLoading(true)
     setError('')
@@ -289,6 +306,7 @@ export default function PointOfSale() {
   useEffect(() => { void loadPos() }, [])
   useEffect(() => { if (!loading) { void loadMenuItems(); void loadTables(); void loadActiveOrders() } }, [effectiveLocationId])
   useEffect(() => { if (tab === 'CANCELLED') void loadCancelledOrders() }, [tab, effectiveLocationId])
+  useEffect(() => { if (tab === 'COMPLETED') void loadCompletedOrders() }, [tab, effectiveLocationId])
   useEffect(() => {
     async function loadReady() {
       try { const response = await api<{ notifications: ReadyNotification[] }>('/pos/orders/ready'); setReadyOrders(response.notifications) } catch { /* Main POS error handling remains with menu and checkout actions. */ }
@@ -469,6 +487,7 @@ export default function PointOfSale() {
         {([
           ['NEW', 'New Sale', <LuPlus key="i" className="size-4" />],
           ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`, <LuClipboardList key="i" className="size-4" />],
+          ['COMPLETED', 'Completed', <LuCircleCheck key="i" className="size-4" />],
           ['CANCELLED', 'Cancelled', <LuBan key="i" className="size-4" />],
         ] as const).map(([value, label, icon]) => (
           <button
@@ -487,7 +506,57 @@ export default function PointOfSale() {
         ))}
       </div>
 
-      {tab === 'CANCELLED' ? (
+      {tab === 'COMPLETED' ? (
+        <section className="mt-4 sm:mt-6">
+          <div className="mb-4 flex flex-wrap gap-1.5">
+            {([['ALL', 'All'], ['OWING', 'Owing'], ['PAID', 'Fully paid']] as const).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setCompletedFilter(value)}
+                className={cn('rounded-full border px-3 py-1 text-xs font-semibold', completedFilter === value ? 'border-secondary bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted')}
+              >
+                {label}
+                {value === 'OWING' && completedOrders.some((o) => o.paymentStatus !== 'PAID') && ` (${completedOrders.filter((o) => o.paymentStatus !== 'PAID').length})`}
+              </button>
+            ))}
+          </div>
+          {completedLoading ? (
+            <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
+          ) : (() => {
+            const rows = completedOrders.filter((o) => completedFilter === 'ALL' || (completedFilter === 'OWING' ? o.paymentStatus !== 'PAID' : o.paymentStatus === 'PAID'))
+            if (rows.length === 0) return <div className="rounded-sm border border-dashed p-10 text-center text-sm text-muted-foreground">No completed orders {completedFilter === 'OWING' ? 'still owing' : completedFilter === 'PAID' ? 'fully paid' : 'yet'}.</div>
+            return (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {rows.map((order) => {
+                  const owed = Math.max(0, order.total - order.paid)
+                  const badge = order.paymentStatus === 'PAID'
+                    ? { label: 'Paid', cls: 'bg-success/10 text-success' }
+                    : order.paymentStatus === 'PARTIAL'
+                      ? { label: 'Part-paid', cls: 'bg-warning/15 text-warning' }
+                      : { label: 'On credit', cls: 'bg-destructive/10 text-destructive' }
+                  return (
+                    <article key={order.id} className="rounded-sm border bg-card p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold">Order #{order.orderNumber}</h3>
+                        <span className={cn('rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', badge.cls)}>{badge.label}</span>
+                      </div>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><LuUserRound className="size-3.5" /> {order.customer ? `${order.customer.firstName} ${order.customer.lastName ?? ''}` : 'Walk-in'} · {order.table?.label ?? 'Takeaway'}</p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">{new Date(order.updatedAt).toLocaleString()}</p>
+                      <p className="mt-2 text-lg font-bold">{formatKes(order.total)}</p>
+                      {owed > 0.01 && <p className="text-xs font-semibold text-warning">Owing {formatKes(owed)} · paid {formatKes(order.paid)}</p>}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">
+                          <LuReceiptText className="size-3.5" /> {owed > 0.01 ? 'View / take payment' : 'View receipt'}
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )
+          })()}
+        </section>
+      ) : tab === 'CANCELLED' ? (
         <section className="mt-4 sm:mt-6">
           {cancelledLoading ? (
             <div className="flex min-h-40 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading…</div>
@@ -845,7 +914,7 @@ export default function PointOfSale() {
           profile={profile as ReceiptProfile}
           paymentMethods={paymentMethods}
           onClose={() => setSettlementOrderId(null)}
-          onChanged={() => void loadActiveOrders()}
+          onChanged={() => { void loadActiveOrders(); if (tab === 'COMPLETED') void loadCompletedOrders() }}
         />
       )}
 
