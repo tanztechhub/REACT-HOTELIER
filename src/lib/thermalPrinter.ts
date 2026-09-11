@@ -226,6 +226,34 @@ function center(text: string, width: number): string {
   return ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t
 }
 
+/** Word-wraps text to `width`, breaking mid-word only if a single word is
+ * itself longer than `width`. Used for the scaled-up business name so long
+ * names wrap to a second centered line instead of getting sliced off. */
+function wrapWords(text: string, width: number): string[] {
+  const lines: string[] = []
+  let cur = ''
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const candidate = cur ? `${cur} ${word}` : word
+    if (candidate.length <= width) {
+      cur = candidate
+      continue
+    }
+    if (cur) lines.push(cur)
+    if (word.length > width) {
+      let rest = word
+      while (rest.length > width) {
+        lines.push(rest.slice(0, width))
+        rest = rest.slice(width)
+      }
+      cur = rest
+    } else {
+      cur = word
+    }
+  }
+  if (cur) lines.push(cur)
+  return lines
+}
+
 export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, s: ThermalSettings): Uint8Array {
   const cols = Math.max(24, Math.min(64, Math.round(s.columns) || 48))
   const e = new ReceiptPrinterEncoder({
@@ -243,11 +271,16 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
   // -------- header: business name (large, caps, centered) down through the
   // location's own receipt header text --------
   if (profile?.businessName) {
-    // Plain bold at normal size — the printer's built-in double-height font
-    // (size(1,2)/size(2,2)) renders as ugly, widely-spaced narrow glyphs on
-    // several ESC/POS clones (Aclas included), so emphasis comes from bold
-    // + caps only, matching the rest of the receipt's font.
-    e.bold(true).line(center(profile.businessName.toUpperCase(), cols)).bold(false)
+    // Symmetric double width+height — the height-only mode used before this
+    // (size(1,2)) rendered as ugly, narrow, widely-spaced glyphs on several
+    // ESC/POS clones (Aclas included); scaling both axes together keeps the
+    // font's proportions intact and prints correctly everywhere. Wrapping
+    // (rather than the old slice-to-width) means a long name gets a second
+    // centered line instead of getting cut off.
+    const nameWidth = Math.max(8, Math.floor(cols / 2))
+    e.size(2, 2).bold(true)
+    for (const line of wrapWords(profile.businessName.toUpperCase(), nameWidth)) e.line(center(line, nameWidth))
+    e.bold(false).size(1, 1)
   }
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
   if (place) e.line(center(place, cols))
