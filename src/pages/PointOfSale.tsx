@@ -167,6 +167,10 @@ function computeFinancials(cart: CartLine[], discountInput: string) {
 export default function PointOfSale() {
   const toast = useToast()
   const user = useAppSelector((s) => s.auth.user)
+  // Mirrors the server's canSeeAllOrders() (pos.routes.ts) purely for this
+  // hint — the actual scoping happens server-side regardless of what the
+  // client thinks, so this can never be a security check, just a label.
+  const canSeeAllOrders = ['POS_VIEW_ALL_ORDERS', 'POS_APPROVE_COUNTER', 'POS_APPROVE_CANCELLATION'].some((p) => user?.role?.permissions.includes(p))
   const [tab, setTab] = useState<'NEW' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED'>('NEW')
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [allAddons, setAllAddons] = useState<CatalogAddon[]>([])
@@ -521,6 +525,10 @@ export default function PointOfSale() {
           </button>
         ))}
       </div>
+
+      {tab !== 'NEW' && !canSeeAllOrders && (
+        <p className="mt-3 text-xs font-medium text-muted-foreground">Showing only the orders you rang up — ask a manager for the "see every order" capability if you need more.</p>
+      )}
 
       {tab === 'COMPLETED' ? (
         <section className="mt-4 sm:mt-6">

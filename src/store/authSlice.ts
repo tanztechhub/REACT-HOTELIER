@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit'
 import { api } from '@/lib/api'
 
-export type AuthRole = { id: string; name: string; allowedSections: string[] }
+export type AuthRole = { id: string; name: string; allowedSections: string[]; permissions: string[] }
 export type AuthLocation = { id: string; name: string }
 
 export type AuthUser = {
