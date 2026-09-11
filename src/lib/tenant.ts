@@ -23,6 +23,7 @@ export type ResolvedTenant = {
   logoUrl: string | null
   shortName: string | null
   businessType: string
+  moduleKeys: string[]
 }
 
 // Exported so main.tsx can resolve the same slug synchronously, pre-render,
@@ -52,14 +53,18 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
     const fallback: ResolvedTenant = {
       tenantId: devTenantId, name: 'Local Dev Workspace', slug: 'dev',
       themeBaseColor: '#1c74d1', themeAccentColor: '#43a047', themeFont: 'jost',
-      logoUrl: null, shortName: null, businessType: 'HOTEL',
+      logoUrl: null, shortName: null, businessType: 'HOTEL', moduleKeys: [],
     }
     try {
-      const response = await fetch(`${apiUrl}/business-profile`, { headers: { 'x-tenant-id': devTenantId } })
-      const data = await response.json() as {
+      const [profileRes, modulesRes] = await Promise.all([
+        fetch(`${apiUrl}/business-profile`, { headers: { 'x-tenant-id': devTenantId } }),
+        fetch(`${apiUrl}/tenant/modules`, { headers: { 'x-tenant-id': devTenantId } }),
+      ])
+      const data = await profileRes.json() as {
         profile?: { themeBaseColor: string; themeAccentColor: string; themeFont: string; logoUrl: string | null; shortName: string | null; businessType: string } | null
       }
-      if (!response.ok || !data.profile) return fallback
+      const modulesData = modulesRes.ok ? await modulesRes.json() as { moduleKeys?: string[] } : {}
+      if (!profileRes.ok || !data.profile) return { ...fallback, moduleKeys: modulesData.moduleKeys ?? [] }
       return {
         ...fallback,
         themeBaseColor: data.profile.themeBaseColor,
@@ -68,6 +73,7 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
         logoUrl: data.profile.logoUrl,
         shortName: data.profile.shortName,
         businessType: data.profile.businessType,
+        moduleKeys: modulesData.moduleKeys ?? [],
       }
     } catch {
       return fallback
@@ -80,6 +86,7 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
       id: string; name: string; slug: string
       themeBaseColor: string; themeAccentColor: string; themeFont: string
       logoUrl: string | null; shortName: string | null; businessType: string
+      moduleKeys: string[]
     }
     error?: string
   }
@@ -96,5 +103,6 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
     logoUrl: data.tenant.logoUrl,
     shortName: data.tenant.shortName,
     businessType: data.tenant.businessType,
+    moduleKeys: data.tenant.moduleKeys,
   }
 }

@@ -42,6 +42,7 @@ export type TenantState = {
   logoUrl: string | null
   shortName: string | null
   businessType: string
+  moduleKeys: string[]
 }
 
 const initialState: TenantState = {
@@ -59,6 +60,7 @@ const initialState: TenantState = {
   logoUrl: null,
   shortName: null,
   businessType: 'HOTEL',
+  moduleKeys: [],
 }
 
 export const resolveTenant = createAsyncThunk('tenant/resolve', async () => {
@@ -109,6 +111,7 @@ const tenantSlice = createSlice({
         state.logoUrl = action.payload.logoUrl
         state.shortName = action.payload.shortName
         state.businessType = action.payload.businessType
+        state.moduleKeys = action.payload.moduleKeys
         state.resolved = true
         state.resolveError = null
       })

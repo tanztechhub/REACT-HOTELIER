@@ -13,6 +13,19 @@ const EXPANDED_WIDTH = 264
 const COLLAPSED_WIDTH = 80
 const DEFAULT_SECTIONS: PermissionSection[] = ['OVERVIEW']
 
+// Which of the platform admin's 3 toggleable modules a nav section needs —
+// a section with no entry here (Overview/Inventory/Team/Finance/Reports/
+// System) is common infrastructure, always shown regardless of the tenant's
+// module choice. A representative ModuleKey per group is enough to detect
+// "on" since the platform only ever flips a whole group together.
+const SECTION_MODULE: Partial<Record<PermissionSection, string>> = {
+  RECEPTION: 'ROOMS',
+  HOUSEKEEPING: 'ROOMS',
+  SALES: 'POS',
+  KITCHEN: 'POS',
+  SERVICE_CENTER: 'SERVICE_CENTER',
+}
+
 type SidebarProps = {
   className?: string
   /** Rendered as a slide-in drawer (mobile) — never collapsible, shows a
@@ -31,8 +44,10 @@ export default function Sidebar({ className, mobile = false, onNavigate }: Sideb
   const shortName = useAppSelector((s) => s.tenant.shortName)
   const allowedSections = useAppSelector((s) => s.auth.user?.role?.allowedSections) ?? DEFAULT_SECTIONS
   const permissions = useAppSelector((s) => s.auth.user?.role?.permissions) ?? []
+  const moduleKeys = useAppSelector((s) => s.tenant.moduleKeys)
   const visibleNavigation = navigation
     .filter((group) => allowedSections.includes(group.section))
+    .filter((group) => { const need = SECTION_MODULE[group.section]; return !need || moduleKeys.includes(need) })
     .map((group) => ({ ...group, items: group.items.filter((item) => !item.permission || permissions.includes(item.permission)) }))
     .filter((group) => group.items.length > 0)
 

@@ -18,11 +18,10 @@ const stats: { label: string; value: string; delta: string; icon: IconType }[] =
   { label: 'Active Staff', value: '12', delta: 'On shift now', icon: LuUsers },
 ]
 
-const enabledModules = new Set(['POS', 'KITCHEN', 'ROOMS', 'RECEPTION', 'HOUSEKEEPING'])
-
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
+  const moduleKeys = useAppSelector((s) => s.tenant.moduleKeys)
   const firstName = user?.firstName ?? 'there'
 
   return (
@@ -65,7 +64,7 @@ export default function Dashboard() {
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {allModules.map((mod) => {
-            const enabled = mod.moduleKey ? enabledModules.has(mod.moduleKey) : false
+            const enabled = mod.moduleKey ? moduleKeys.includes(mod.moduleKey) : false
             return (
               <div
                 key={mod.href}

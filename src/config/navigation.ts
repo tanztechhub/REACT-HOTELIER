@@ -94,7 +94,7 @@ export const navigation: NavGroup[] = [
     label: 'Reception',
     section: 'RECEPTION',
     items: [
-      { label: 'Check In', href: '/reservations', icon: LuLogIn, moduleKey: 'RECEPTION' },
+      { label: 'Check In', href: '/reservations', icon: LuLogIn, moduleKey: 'RESERVATIONS' },
       { label: 'Guest Stays', href: '/reception/stays', icon: LuHistory },
       { label: 'Room Management', href: '/rooms', icon: LuBedDouble, moduleKey: 'ROOMS' },
       { label: 'Services', href: '/reception/services', icon: LuConciergeBell },
