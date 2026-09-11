@@ -138,11 +138,11 @@ export default function InventoryReport() {
           </section>
 
           {report.lowStock.length > 0 && (
-            <section className="mt-6 rounded-sm border border-warn/30 bg-warn/5 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold text-warn"><LuTriangleAlert className="size-4" /> Running low, as of {new Date(report.range.to).toLocaleDateString()}</p>
+            <section className="mt-6 rounded-sm border border-warning/30 bg-warning/5 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-warning"><LuTriangleAlert className="size-4" /> Running low, as of {new Date(report.range.to).toLocaleDateString()}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {report.lowStock.map((p) => (
-                  <span key={p.productId} className="rounded-full border border-warn/40 bg-card px-3 py-1 text-xs font-medium">
+                  <span key={p.productId} className="rounded-full border border-warning/40 bg-card px-3 py-1 text-xs font-medium">
                     {p.name} <span className="text-muted-foreground">— {p.closing.toLocaleString()} {p.unit} (reorder at {p.reorderLevel.toLocaleString()})</span>
                   </span>
                 ))}
@@ -174,13 +174,13 @@ export default function InventoryReport() {
                         <tr key={p.productId} className="border-t">
                           <td className="px-4 py-3">
                             <p className="font-medium">{p.name}</p>
-                            {p.low && <span className="text-xs font-semibold text-warn">Low stock</span>}
+                            {p.low && <span className="text-xs font-semibold text-warning">Low stock</span>}
                           </td>
                           <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{p.opening.toLocaleString()} {p.unit}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-success">{p.purchased ? `+${p.purchased.toLocaleString()}` : '—'}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-secondary">{p.sold ? `-${p.sold.toLocaleString()}` : '—'}</td>
                           <td className="px-4 py-3 text-right tabular-nums text-destructive">{p.damaged ? `-${p.damaged.toLocaleString()}` : '—'}</td>
-                          <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', p.low && 'text-warn')}>{p.closing.toLocaleString()} {p.unit}</td>
+                          <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', p.low && 'text-warning')}>{p.closing.toLocaleString()} {p.unit}</td>
                           <td className="px-4 py-3 text-right tabular-nums">{formatKes(p.closingValue)}</td>
                         </tr>
                       ))}

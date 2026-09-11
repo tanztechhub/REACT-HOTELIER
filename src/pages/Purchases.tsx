@@ -28,7 +28,7 @@ type Status = 'DRAFT' | 'ORDERED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELL
 const STATUS_META: Record<Status, { label: string; className: string }> = {
   DRAFT: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
   ORDERED: { label: 'Ordered', className: 'bg-secondary/10 text-secondary' },
-  PARTIALLY_RECEIVED: { label: 'Partially received', className: 'bg-warn/10 text-warn' },
+  PARTIALLY_RECEIVED: { label: 'Partially received', className: 'bg-warning/10 text-warning' },
   RECEIVED: { label: 'Received', className: 'bg-success/10 text-success' },
   CANCELLED: { label: 'Cancelled', className: 'bg-destructive/10 text-destructive' },
 }
@@ -510,7 +510,7 @@ export default function Purchases() {
                         <td className="px-4 py-2">{i.product.name}</td>
                         <td className="px-4 py-2 text-right tabular-nums">{ordered} {i.product.unit}</td>
                         <td className="px-4 py-2 text-right tabular-nums">
-                          <span className={received >= ordered ? 'text-success' : received > 0 ? 'text-warn' : 'text-muted-foreground'}>{received}</span>
+                          <span className={received >= ordered ? 'text-success' : received > 0 ? 'text-warning' : 'text-muted-foreground'}>{received}</span>
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.unitCost))}</td>
                         <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.lineTotal))}</td>
