@@ -4,6 +4,7 @@ import {
   LuCircleAlert,
   LuCircleCheck,
   LuLoaderCircle,
+  LuPackageCheck,
   LuPencil,
   LuPlus,
   LuPrinter,
@@ -23,16 +24,20 @@ import type { DocProfile } from '@/components/documents/pdf'
 
 const DocumentViewer = lazy(() => import('@/components/documents/DocumentViewer'))
 
-type Status = 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED'
+type Status = 'DRAFT' | 'ORDERED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED'
 const STATUS_META: Record<Status, { label: string; className: string }> = {
   DRAFT: { label: 'Draft', className: 'bg-muted text-muted-foreground' },
   ORDERED: { label: 'Ordered', className: 'bg-secondary/10 text-secondary' },
+  PARTIALLY_RECEIVED: { label: 'Partially received', className: 'bg-warn/10 text-warn' },
   RECEIVED: { label: 'Received', className: 'bg-success/10 text-success' },
   CANCELLED: { label: 'Cancelled', className: 'bg-destructive/10 text-destructive' },
 }
+// Manual status changes only — PARTIALLY_RECEIVED/RECEIVED are computed from
+// real goods receipts (see the "Receive goods" action), never set by hand.
 const NEXT_ACTIONS: Record<Status, { to: Status; label: string }[]> = {
   DRAFT: [{ to: 'ORDERED', label: 'Mark ordered' }, { to: 'CANCELLED', label: 'Cancel' }],
-  ORDERED: [{ to: 'RECEIVED', label: 'Mark received' }, { to: 'CANCELLED', label: 'Cancel' }],
+  ORDERED: [{ to: 'CANCELLED', label: 'Cancel' }],
+  PARTIALLY_RECEIVED: [{ to: 'CANCELLED', label: 'Cancel remaining' }],
   RECEIVED: [],
   CANCELLED: [],
 }
@@ -40,14 +45,26 @@ const NEXT_ACTIONS: Record<Status, { to: Status; label: string }[]> = {
 type Supplier = { id: string; name: string }
 type Product = { id: string; name: string; unit: string }
 type Employee = { id: string; firstName: string; lastName: string }
+type Location = { id: string; name: string; type: string | null }
 type PurchaseItem = {
   id: string
   productId: string
   quantity: string
   unitCost: string
   lineTotal: string
+  receivedQuantity: string
   note: string | null
   product: { id: string; name: string; unit: string }
+}
+type GoodsReceiptItem = { id: string; productId: string; quantity: string; unitCost: string; note: string | null; product: { id: string; name: string; unit: string } }
+type GoodsReceipt = {
+  id: string
+  receiptNo: string
+  receivedAt: string
+  note: string | null
+  location: { id: string; name: string }
+  createdByEmployee: Employee | null
+  items: GoodsReceiptItem[]
 }
 type Purchase = {
   id: string
@@ -62,8 +79,10 @@ type Purchase = {
   taxAmount: string
   total: string
   supplier: { id: string; name: string }
+  location: { id: string; name: string } | null
   requisition: { id: string; requisitionNo: string } | null
   items: PurchaseItem[]
+  goodsReceipts: GoodsReceipt[]
   orderedAt: string | null
   receivedAt: string | null
   createdAt: string
@@ -76,6 +95,7 @@ type Summary = { total: number; byStatus: Record<Status, number>; openValue: num
 type LineRow = { productId: string; quantity: string; unitCost: string; note: string }
 type PurchaseForm = {
   supplierId: string
+  locationId: string
   orderDate: string
   expectedDate: string
   reference: string
@@ -83,7 +103,7 @@ type PurchaseForm = {
   notes: string
   items: LineRow[]
 }
-const emptyForm: PurchaseForm = { supplierId: '', orderDate: '', expectedDate: '', reference: '', taxRate: '0', notes: '', items: [] }
+const emptyForm: PurchaseForm = { supplierId: '', locationId: '', orderDate: '', expectedDate: '', reference: '', taxRate: '0', notes: '', items: [] }
 
 const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : '')
@@ -99,9 +119,10 @@ function SetupMessage() {
 export default function Purchases() {
   const toast = useToast()
   const [purchases, setPurchases] = useState<Purchase[]>([])
-  const [summary, setSummary] = useState<Summary>({ total: 0, byStatus: { DRAFT: 0, ORDERED: 0, RECEIVED: 0, CANCELLED: 0 }, openValue: 0 })
+  const [summary, setSummary] = useState<Summary>({ total: 0, byStatus: { DRAFT: 0, ORDERED: 0, PARTIALLY_RECEIVED: 0, RECEIVED: 0, CANCELLED: 0 }, openValue: 0 })
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | Status>('all')
   const [loading, setLoading] = useState(true)
@@ -119,6 +140,7 @@ export default function Purchases() {
   const [productQuery, setProductQuery] = useState('')
   const [profile, setProfile] = useState<DocProfile>(null)
   const [printing, setPrinting] = useState<Purchase | null>(null)
+  const [receiving, setReceiving] = useState<Purchase | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -144,6 +166,7 @@ export default function Purchases() {
     api<{ suppliers: Supplier[] }>('/suppliers?active=true').then((r) => setSuppliers(r.suppliers)).catch(() => {})
     api<{ products: Product[] }>('/products?active=true').then((r) => setProducts(r.products)).catch(() => {})
     api<{ profile: DocProfile }>('/business-profile').then((r) => setProfile(r.profile)).catch(() => {})
+    api<{ locations: Location[] }>('/locations').then((r) => setLocations(r.locations)).catch(() => {})
   }, [])
 
   const productLabel = useMemo(() => {
@@ -171,7 +194,7 @@ export default function Purchases() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ ...emptyForm, orderDate: todayInput() })
+    setForm({ ...emptyForm, orderDate: todayInput(), locationId: locations.find((l) => l.type === 'STORE')?.id ?? '' })
     setProductQuery('')
     setFormError('')
     setShowForm(true)
@@ -182,6 +205,7 @@ export default function Purchases() {
     setProductQuery('')
     setForm({
       supplierId: purchase.supplier.id,
+      locationId: purchase.location?.id ?? locations.find((l) => l.type === 'STORE')?.id ?? '',
       orderDate: toDateInput(purchase.orderDate),
       expectedDate: toDateInput(purchase.expectedDate),
       reference: purchase.reference ?? '',
@@ -211,6 +235,7 @@ export default function Purchases() {
     try {
       const payload = {
         supplierId: form.supplierId,
+        locationId: form.locationId || undefined,
         orderDate: form.orderDate || undefined,
         expectedDate: form.expectedDate || undefined,
         reference: form.reference.trim() || undefined,
@@ -233,7 +258,7 @@ export default function Purchases() {
   }
 
   async function changeStatus(purchase: Purchase, to: Status) {
-    const verb = to === 'CANCELLED' ? 'Cancel' : to === 'ORDERED' ? 'Mark as ordered' : 'Mark as received'
+    const verb = to === 'CANCELLED' ? 'Cancel' : 'Mark as ordered'
     if (!window.confirm(`${verb} — ${purchase.purchaseNo}?`)) return
     setWorking(true)
     setNotice('')
@@ -271,7 +296,7 @@ export default function Purchases() {
         <div>
           <p className="text-sm font-semibold text-secondary">Inventory</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Purchases</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Purchase orders raised against a supplier. A document for now — receiving stock into the store comes later.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Purchase orders raised against a supplier. Receiving goods moves real stock into the location you choose.</p>
         </div>
         <Button onClick={openCreate}>
           <LuPlus /> New purchase
@@ -340,6 +365,9 @@ export default function Purchases() {
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-1">
                         <button onClick={() => setPrinting(p)} title="Print / PDF" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPrinter /></button>
+                        {(p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED') && (
+                          <button onClick={() => setReceiving(p)} className="inline-flex items-center gap-1 rounded-sm border border-secondary/40 px-2.5 py-1.5 text-xs font-semibold text-secondary hover:bg-secondary/10"><LuPackageCheck className="size-3.5" /> Receive</button>
+                        )}
                         {NEXT_ACTIONS[p.status].filter((a) => a.to !== 'CANCELLED').map((a) => (
                           <button key={a.to} onClick={() => void changeStatus(p, a.to)} disabled={working} className="rounded-sm border px-2.5 py-1.5 text-xs font-semibold hover:bg-muted disabled:opacity-50">{a.label}</button>
                         ))}
@@ -372,6 +400,12 @@ export default function Purchases() {
                 <select required className="input" value={form.supplierId} onChange={(e) => setForm({ ...form, supplierId: e.target.value })}>
                   <option value="">Select supplier</option>
                   {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Deliver to">
+                <select className="input" value={form.locationId} onChange={(e) => setForm({ ...form, locationId: e.target.value })}>
+                  <option value="">Select location</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.type === 'STORE' ? ' (warehouse)' : ''}</option>)}
                 </select>
               </Field>
               <Field label="Reference"><input placeholder="Supplier invoice / quote no." value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} className="input" /></Field>
@@ -465,17 +499,24 @@ export default function Purchases() {
             <div className="mt-5 overflow-hidden rounded-sm border">
               <table className="w-full text-left text-sm">
                 <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr><th className="px-4 py-2">Product</th><th className="px-4 py-2 text-right">Qty</th><th className="px-4 py-2 text-right">Unit cost</th><th className="px-4 py-2 text-right">Line total</th></tr>
+                  <tr><th className="px-4 py-2">Product</th><th className="px-4 py-2 text-right">Qty</th><th className="px-4 py-2 text-right">Received</th><th className="px-4 py-2 text-right">Unit cost</th><th className="px-4 py-2 text-right">Line total</th></tr>
                 </thead>
                 <tbody>
-                  {detail.items.map((i) => (
-                    <tr key={i.id} className="border-t">
-                      <td className="px-4 py-2">{i.product.name}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{Number(i.quantity)} {i.product.unit}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.unitCost))}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.lineTotal))}</td>
-                    </tr>
-                  ))}
+                  {detail.items.map((i) => {
+                    const received = Number(i.receivedQuantity)
+                    const ordered = Number(i.quantity)
+                    return (
+                      <tr key={i.id} className="border-t">
+                        <td className="px-4 py-2">{i.product.name}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{ordered} {i.product.unit}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">
+                          <span className={received >= ordered ? 'text-success' : received > 0 ? 'text-warn' : 'text-muted-foreground'}>{received}</span>
+                        </td>
+                        <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.unitCost))}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">{formatKes(Number(i.lineTotal))}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -488,6 +529,28 @@ export default function Purchases() {
 
             {detail.notes && <p className="mt-4 rounded-sm bg-muted/50 p-3 text-sm text-muted-foreground">{detail.notes}</p>}
 
+            {detail.goodsReceipts.length > 0 && (
+              <div className="mt-5 border-t pt-4">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Receiving history</p>
+                <div className="space-y-2">
+                  {detail.goodsReceipts.map((r) => (
+                    <div key={r.id} className="rounded-sm border bg-muted/30 p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-semibold">{r.receiptNo}</span>
+                        <span className="text-xs text-muted-foreground">{r.location.name} · {new Date(r.receivedAt).toLocaleDateString()}{r.createdByEmployee && <> · {r.createdByEmployee.firstName} {r.createdByEmployee.lastName}</>}</span>
+                      </div>
+                      <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+                        {r.items.map((it) => (
+                          <li key={it.id}>{Number(it.quantity)} {it.product.unit} {it.product.name} @ {formatKes(Number(it.unitCost))}</li>
+                        ))}
+                      </ul>
+                      {r.note && <p className="mt-1.5 text-xs italic text-muted-foreground">{r.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
               {detail.createdByEmployee && <>Created by {detail.createdByEmployee.firstName} {detail.createdByEmployee.lastName} on {new Date(detail.createdAt).toLocaleDateString()}</>}
               {detail.orderedAt && <> · ordered {new Date(detail.orderedAt).toLocaleDateString()}</>}
@@ -498,6 +561,9 @@ export default function Purchases() {
               <button onClick={() => setPrinting(detail)} className="mr-auto inline-flex items-center gap-1.5 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted"><LuPrinter className="size-4" /> Print</button>
               <button onClick={() => setDetail(null)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Close</button>
               {detail.status === 'DRAFT' && <button onClick={() => { const d = detail; setDetail(null); openEdit(d) }} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Edit</button>}
+              {(detail.status === 'ORDERED' || detail.status === 'PARTIALLY_RECEIVED') && (
+                <button onClick={() => setReceiving(detail)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"><LuPackageCheck className="size-4" /> Receive goods</button>
+              )}
               {NEXT_ACTIONS[detail.status].map((a) => (
                 <button key={a.to} onClick={() => void changeStatus(detail, a.to)} disabled={working}
                   className={cn('rounded-sm px-4 py-2.5 text-sm font-semibold disabled:opacity-60', a.to === 'CANCELLED' ? 'border text-destructive hover:bg-destructive/10' : 'bg-primary text-primary-foreground')}>
@@ -514,6 +580,119 @@ export default function Purchases() {
           <DocumentViewer kind="purchase" data={printing} profile={profile} onClose={() => setPrinting(null)} />
         </Suspense>
       )}
+
+      {receiving && (
+        <ReceiveGoodsModal
+          purchase={receiving}
+          locations={locations}
+          onClose={() => setReceiving(null)}
+          onReceived={(result) => {
+            setReceiving(null)
+            setDetail((d) => (d && d.id === result.purchase.id ? result.purchase : d))
+            toast.success(`${result.receiptNo} received.`)
+            void load()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+type ReceiveLine = { purchaseItemId: string; productName: string; unit: string; remaining: number; quantity: string; unitCost: string }
+
+function ReceiveGoodsModal({ purchase, locations, onClose, onReceived }: {
+  purchase: Purchase
+  locations: Location[]
+  onClose: () => void
+  onReceived: (result: { id: string; receiptNo: string; purchase: Purchase }) => void
+}) {
+  const toast = useToast()
+  const [locationId, setLocationId] = useState(purchase.location?.id ?? locations.find((l) => l.type === 'STORE')?.id ?? '')
+  const [receivedAt, setReceivedAt] = useState(todayInput())
+  const [note, setNote] = useState('')
+  const [lines, setLines] = useState<ReceiveLine[]>(() => purchase.items
+    .map((i) => ({ purchaseItemId: i.id, productName: i.product.name, unit: i.product.unit, remaining: Number(i.quantity) - Number(i.receivedQuantity), unitCost: i.unitCost }))
+    .filter((l) => l.remaining > 0.0005)
+    .map((l) => ({ ...l, quantity: String(l.remaining) })))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function setLine(purchaseItemId: string, patch: Partial<ReceiveLine>) {
+    setLines((cur) => cur.map((l) => (l.purchaseItemId === purchaseItemId ? { ...l, ...patch } : l)))
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    const items = lines.filter((l) => Number(l.quantity) > 0).map((l) => ({ purchaseItemId: l.purchaseItemId, quantity: Number(l.quantity), unitCost: Number(l.unitCost) || 0 }))
+    if (!locationId) { setError('Choose a location to receive into'); return }
+    if (!items.length) { setError('Enter a quantity for at least one item'); return }
+    setSaving(true)
+    setError('')
+    try {
+      const { receipt, purchase: updated } = await api<{ receipt: { id: string; receiptNo: string }; purchase: Purchase }>(`/purchases/${purchase.id}/goods-receipts`, {
+        method: 'POST',
+        body: JSON.stringify({ locationId, receivedAt: receivedAt || undefined, note: note.trim() || undefined, items }),
+      })
+      onReceived({ id: receipt.id, receiptNo: receipt.receiptNo, purchase: updated })
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not post this goods receipt'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <form onSubmit={submit} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+        <div>
+          <p className="text-sm font-semibold text-secondary">Goods receipt</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold">Receive {purchase.purchaseNo}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Only enter what actually arrived — the rest stays outstanding and can be received later.</p>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Field label="Deliver into" required>
+            <select required className="input" value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+              <option value="">Select location</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}{l.type === 'STORE' ? ' (warehouse)' : ''}</option>)}
+            </select>
+          </Field>
+          <Field label="Received on"><input type="date" value={receivedAt} onChange={(e) => setReceivedAt(e.target.value)} className="input" /></Field>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          <div className="grid grid-cols-[1fr_6rem_6rem] gap-2 px-1 text-xs font-medium text-muted-foreground">
+            <span>Product</span><span>Qty received</span><span>Unit cost</span>
+          </div>
+          {lines.length === 0 ? (
+            <p className="rounded-sm border border-dashed p-4 text-center text-sm text-muted-foreground">Nothing left to receive on this order.</p>
+          ) : lines.map((l) => (
+            <div key={l.purchaseItemId} className="grid grid-cols-[1fr_6rem_6rem] items-center gap-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{l.productName}</p>
+                <p className="text-xs text-muted-foreground">{l.remaining} {l.unit} outstanding</p>
+              </div>
+              <input type="number" min="0" max={l.remaining} step="0.001" value={l.quantity} onChange={(e) => setLine(l.purchaseItemId, { quantity: e.target.value })} className="input" />
+              <input type="number" min="0" step="0.01" value={l.unitCost} onChange={(e) => setLine(l.purchaseItemId, { unitCost: e.target.value })} className="input" />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5">
+          <Field label="Note" className="block"><input placeholder="e.g. 1 case arrived damaged, replaced next delivery" value={note} onChange={(e) => setNote(e.target.value)} className="input" /></Field>
+        </div>
+
+        {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+        <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+          <button type="button" onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+          <button disabled={saving || lines.length === 0} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            {saving && <LuLoaderCircle className="animate-spin" />} Post receipt
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

@@ -44,6 +44,7 @@ import StockLedger from "@/pages/StockLedger";
 import Suppliers from "@/pages/Suppliers";
 import Purchases from "@/pages/Purchases";
 import PurchaseRequisitions from "@/pages/PurchaseRequisitions";
+import GoodsReceived from "@/pages/GoodsReceived";
 import ServiceAppointments from "@/pages/ServiceAppointments";
 import ServiceMembershipPayments from "@/pages/ServiceMembershipPayments";
 import ServiceMembershipPlans from "@/pages/ServiceMembershipPlans";
@@ -181,6 +182,7 @@ function App() {
           path="/inventory/purchase-requisitions"
           element={<PurchaseRequisitions />}
         />
+        <Route path="/inventory/goods-received" element={<GoodsReceived />} />
         <Route path="/inventory/categories" element={<Categories />} />
         <Route path="/kitchen/recipes" element={<Recipes />} />
         <Route path="/menu/categories" element={<MenuCategories />} />
