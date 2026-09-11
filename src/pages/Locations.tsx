@@ -32,6 +32,14 @@ const SELLING_PERMISSIONS = [
   { key: 'canSellProducts', label: 'Can Sell Products', description: 'Retail store items' },
 ] as const
 
+const SERVE_MODES = ['KITCHEN', 'COUNTER', 'DIRECT'] as const
+type ServeMode = (typeof SERVE_MODES)[number]
+const serveModeInfo: Record<ServeMode, { label: string; description: string }> = {
+  KITCHEN: { label: 'Kitchen ticket', description: 'Full prep flow — Kitchen takes it, marks it preparing then ready, a waiter serves it.' },
+  COUNTER: { label: 'Counter approval', description: 'No kitchen prep, but a fixed counter still hands it over — a waiter sends the order here, and only staff with the counter-approval capability can mark it served. For a bar or club where the floor and the counter are different people.' },
+  DIRECT: { label: 'Serve instantly', description: 'No kitchen, no approval step — served the moment it’s rung up (a bakery/café counter handing the item straight over).' },
+}
+
 // Compact per-row indicators for the four selling permissions — green when
 // the location may sell that line, faint when it can't.
 const PERMISSION_ICONS: { key: 'canSellRooms' | 'canSellMenu' | 'canSellServices' | 'canSellProducts'; icon: IconType; label: string }[] = [
@@ -60,7 +68,7 @@ type LocationRow = {
   canSellMenu: boolean
   canSellServices: boolean
   canSellProducts: boolean
-  servesDirectly: boolean
+  serveMode: ServeMode
   _count: { menuItems: number; employees: number }
 }
 type LocationForm = {
@@ -79,14 +87,14 @@ type LocationForm = {
   canSellMenu: boolean
   canSellServices: boolean
   canSellProducts: boolean
-  servesDirectly: boolean
+  serveMode: ServeMode
 }
 const emptyLocationForm: LocationForm = {
   name: '', type: '', description: '', address: '', managerId: '',
   primaryPhone: '', secondaryPhone: '', email: '', openingTime: '', closingTime: '',
   isActive: true,
   canSellRooms: true, canSellMenu: true, canSellServices: true, canSellProducts: true,
-  servesDirectly: false,
+  serveMode: 'KITCHEN',
 }
 
 export default function Locations() {
@@ -147,7 +155,7 @@ export default function Locations() {
       canSellMenu: location.canSellMenu,
       canSellServices: location.canSellServices,
       canSellProducts: location.canSellProducts,
-      servesDirectly: location.servesDirectly,
+      serveMode: location.serveMode,
     })
     setShowForm(true)
   }
@@ -324,10 +332,12 @@ export default function Locations() {
                   // doesn't run its own POS — SHOP is a genuine customer-
                   // facing retail point, so it keeps the normal defaults.
                   const isWarehouse = type === 'STORE' || type === 'HOUSEKEEPING'
-                  // Just a starting point — the owner can flip this per
-                  // location below regardless of type.
-                  const servesDirectly = type === 'BAR' || type === 'BAKERY' || type === 'CAFE'
-                  setForm({ ...form, type, servesDirectly, ...(isWarehouse ? { canSellRooms: false, canSellMenu: false, canSellServices: false, canSellProducts: false } : {}) })
+                  // Just a starting point — the owner can change this per
+                  // location below regardless of type. A bar defaults to
+                  // Counter approval (floor takes the order, the bar counter
+                  // hands it over); a café/bakery counter serves instantly.
+                  const serveMode: ServeMode = type === 'BAR' ? 'COUNTER' : type === 'BAKERY' || type === 'CAFE' ? 'DIRECT' : 'KITCHEN'
+                  setForm({ ...form, type, serveMode, ...(isWarehouse ? { canSellRooms: false, canSellMenu: false, canSellServices: false, canSellProducts: false } : {}) })
                 }}>
                   <option value="" disabled>Select type</option>
                   {LOCATION_TYPES.map((t) => <option key={t} value={t}>{typeLabels[t]}</option>)}
@@ -377,18 +387,34 @@ export default function Locations() {
             {form.canSellMenu && (
               <div className="mt-6 border-t pt-5">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Order Handling</p>
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-sm border bg-muted/40 p-3">
-                  <input
-                    type="checkbox"
-                    checked={form.servesDirectly}
-                    onChange={(e) => setForm({ ...form, servesDirectly: e.target.checked })}
-                    className="mt-0.5 size-4 accent-secondary"
-                  />
-                  <span>
-                    <span className="block text-sm font-semibold">Serves food directly</span>
-                    <span className="block text-xs text-muted-foreground">No Kitchen ticket — staff hand the item over on the spot instead of sending it to prepare. Turn this off for a location that needs cook/prep time tracked.</span>
-                  </span>
-                </label>
+                <p className="mb-3 -mt-2 text-xs text-muted-foreground">How does a menu order at this location get served?</p>
+                <div className="space-y-2">
+                  {SERVE_MODES.map((mode) => {
+                    const checked = form.serveMode === mode
+                    const { label, description } = serveModeInfo[mode]
+                    return (
+                      <label
+                        key={mode}
+                        className={cn(
+                          'flex cursor-pointer items-start gap-2.5 rounded-sm border p-3 transition-colors',
+                          checked ? 'border-secondary bg-secondary/10' : 'bg-muted/40 hover:bg-muted',
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="serveMode"
+                          checked={checked}
+                          onChange={() => setForm({ ...form, serveMode: mode })}
+                          className="mt-0.5 size-4 accent-secondary"
+                        />
+                        <span>
+                          <span className={cn('block text-sm font-semibold', checked && 'text-secondary')}>{label}</span>
+                          <span className="block text-xs text-muted-foreground">{description}</span>
+                        </span>
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

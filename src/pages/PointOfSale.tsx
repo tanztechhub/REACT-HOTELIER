@@ -40,7 +40,7 @@ type ApiMenuItem = {
   taxTreatment: TaxTreatment | null
 }
 type RestaurantTable = { id: string; label: string; area: string | null; status: 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'OUT_OF_SERVICE' }
-type Location = { id: string; name: string; type: string | null; isActive: boolean; servesDirectly: boolean }
+type Location = { id: string; name: string; type: string | null; isActive: boolean; serveMode: 'KITCHEN' | 'COUNTER' | 'DIRECT' }
 type BusinessProfile = { businessName: string; taxRate: string | null; taxMode: TaxMode }
 
 type LineTax = { rate: number; mode: TaxMode; treatment: TaxTreatment }
@@ -328,7 +328,9 @@ export default function PointOfSale() {
   const visibleItems = menuItems.filter((item) => (activeCategory === 'All items' || item.category.name === activeCategory) && (!search.trim() || `${item.name} ${item.description ?? ''}`.toLowerCase().includes(search.trim().toLowerCase())))
   const financials = useMemo(() => computeFinancials(cart, discount), [cart, discount])
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0)
-  const instantServe = locations.find((l) => l.id === effectiveLocationId)?.servesDirectly === true
+  const serveMode = locations.find((l) => l.id === effectiveLocationId)?.serveMode ?? 'KITCHEN'
+  const instantServe = serveMode === 'DIRECT'
+  const sendsToCounter = serveMode === 'COUNTER'
 
   function addConfiguredLine(item: MenuItem, variant: Variant | null, addons: Addon[], quantity: number) {
     setConfirmation(null)
@@ -431,7 +433,7 @@ export default function PointOfSale() {
       })
       resetSale()
       setConfirmation(response.order)
-      const msg = instantServe ? `Order #${response.order.orderNumber} served` : `Order #${response.order.orderNumber} sent to the kitchen`
+      const msg = instantServe ? `Order #${response.order.orderNumber} served` : sendsToCounter ? `Order #${response.order.orderNumber} sent to the counter` : `Order #${response.order.orderNumber} sent to the kitchen`
       toast.success(msg)
       setSentPulse(true)
       window.clearTimeout(sentTimer.current)
@@ -485,7 +487,7 @@ export default function PointOfSale() {
       </div>
 
       {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
-      {confirmation && <div className="mt-5 flex items-center gap-2 rounded-sm border border-accent/30 bg-accent/10 p-3 text-sm font-medium text-accent"><LuCircleCheck />{instantServe ? `Order #${confirmation.orderNumber} was served.` : `Order #${confirmation.orderNumber} was saved and sent to the kitchen.`}</div>}
+      {confirmation && <div className="mt-5 flex items-center gap-2 rounded-sm border border-accent/30 bg-accent/10 p-3 text-sm font-medium text-accent"><LuCircleCheck />{instantServe ? `Order #${confirmation.orderNumber} was served.` : sendsToCounter ? `Order #${confirmation.orderNumber} was sent to the counter.` : `Order #${confirmation.orderNumber} was saved and sent to the kitchen.`}</div>}
       {readyOrders.length > 0 && (
         <div className="mt-5 space-y-2">
           {readyOrders.map((notification) => (
@@ -896,6 +898,7 @@ export default function PointOfSale() {
                   {sentPulse ? <><LuCircleCheck className="size-4" /> {instantServe ? 'Served!' : 'Order sent!'}</>
                     : submitting ? <><LuLoaderCircle className="animate-spin" /> Sending…</>
                     : instantServe ? `Serve now · ${formatKes(financials.total)}`
+                    : sendsToCounter ? `Send to counter · ${formatKes(financials.total)}`
                     : `Send order · ${formatKes(financials.total)}`}
                 </button>
               </div>
