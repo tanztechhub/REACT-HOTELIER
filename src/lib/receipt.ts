@@ -1,4 +1,5 @@
 import type { ReceiptOrder, ReceiptProfile } from '@/components/pos/OrderReceipt'
+import { receiptFooterText, receiptHeaderText, receiptPhone, servedByName, showsTaxAsAddedOn } from '@/lib/receiptFields'
 
 const money = (v: number | string) => `KES ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const RULE = '--------------------------------'
@@ -7,15 +8,21 @@ const RULE = '--------------------------------'
 export function receiptToText(order: ReceiptOrder, profile: ReceiptProfile, shareUrl?: string): string {
   const lines: string[] = []
   lines.push('🧾 RECEIPT', '')
-  if (profile?.businessName) lines.push(profile.businessName)
+  if (profile?.businessName) lines.push(profile.businessName.toUpperCase())
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
   if (place) lines.push(place)
-  if (profile?.primaryPhone) lines.push(profile.primaryPhone)
+  if (order.location?.name) lines.push(order.location.name)
+  const phone = receiptPhone(order, profile)
+  if (phone) lines.push(phone)
   if (profile?.kraPin) lines.push(`PIN: ${profile.kraPin}`)
+  const header = receiptHeaderText(order)
+  if (header) lines.push(header)
   lines.push(RULE)
 
-  lines.push(`Order #${order.orderNumber}`)
+  lines.push(`Receipt: ${order.orderNumber}`)
   lines.push(`Date: ${new Date(order.updatedAt).toLocaleString()}`)
+  const served = servedByName(order)
+  if (served) lines.push(`Served by: ${served}`)
   lines.push(order.table ? `Table: ${order.table.label}` : 'Takeaway')
   lines.push(RULE)
 
@@ -31,15 +38,22 @@ export function receiptToText(order: ReceiptOrder, profile: ReceiptProfile, shar
   const f = order.financials
   lines.push(`Subtotal: ${money(f.subtotal)}`)
   if (f.discount > 0) lines.push(`Discount: -${money(f.discount)}`)
-  if (f.taxAmount > 0) lines.push(`Tax: ${money(f.taxAmount)}`)
+  if (showsTaxAsAddedOn(order)) lines.push(`Tax (${f.taxRate}%): +${money(f.taxAmount)}`)
   lines.push(`TOTAL: ${money(f.total)}`)
+  lines.push(RULE)
 
-  if (order.payments.length > 0) {
-    lines.push(RULE)
-    for (const p of order.payments) {
-      lines.push(`${p.paymentMethod.name}: ${money(p.amount)}${p.reference ? ` (${p.reference})` : ''}`)
-    }
-  }
+  lines.push('Payments:')
+  if (order.payments.length === 0) lines.push('No payment recorded yet.')
+  else for (const p of order.payments) lines.push(`${p.paymentMethod.name}: ${money(p.amount)}${p.reference ? ` (${p.reference})` : ''}`)
+  lines.push(RULE)
+
+  lines.push('Tax breakdown:')
+  for (const t of f.taxLines ?? []) lines.push(`${t.label}: net ${money(t.net)} / tax ${money(t.tax)} / gross ${money(t.gross)}`)
+  if ((f.zeroRatedAmount ?? 0) > 0) lines.push(`Includes zero-rated: ${money(f.zeroRatedAmount!)}`)
+  if ((f.exemptAmount ?? 0) > 0) lines.push(`Includes exempt: ${money(f.exemptAmount!)}`)
+  lines.push(RULE)
+
+  lines.push(receiptFooterText(order))
 
   if (shareUrl) {
     lines.push(RULE)

@@ -1,5 +1,6 @@
 import ReceiptPrinterEncoder from '@point-of-sale/receipt-printer-encoder'
 import type { ReceiptOrder, ReceiptProfile } from '@/components/pos/OrderReceipt'
+import { receiptFooterText, receiptHeaderText, receiptPhone, servedByName, showsTaxAsAddedOn } from '@/lib/receiptFields'
 
 /**
  * Direct ESC/POS thermal printing from the browser. Four transports:
@@ -239,38 +240,77 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
   const nameW = cols - priceW - 1
   const row = (l: string, r: string) => e.table([{ width: nameW, align: 'left' }, { width: priceW, align: 'right' }], [[l, r]])
 
-  if (profile?.businessName) e.bold(true).line(center(profile.businessName, cols)).bold(false)
+  // -------- header: business name (large, caps, centered) down through the
+  // location's own receipt header text --------
+  if (profile?.businessName) {
+    e.size(2, 2).bold(true).line(center(profile.businessName.toUpperCase(), Math.ceil(cols / 2))).bold(false).size(1, 1)
+  }
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
   if (place) e.line(center(place, cols))
-  if (profile?.primaryPhone) e.line(center(profile.primaryPhone, cols))
+  if (order.location?.name) e.line(center(order.location.name, cols))
+  const phone = receiptPhone(order, profile)
+  if (phone) e.line(center(phone, cols))
   if (profile?.kraPin) e.line(center(`PIN: ${profile.kraPin}`, cols))
+  const header = receiptHeaderText(order)
+  if (header) for (const l of header.split('\n')) e.line(center(l, cols))
   e.rule()
 
-  e.line(`Order #${order.orderNumber}`)
-  e.line(new Date(order.updatedAt).toLocaleString())
+  // -------- receipt / date / served by (left-aligned) --------
+  e.line(`Receipt: ${order.orderNumber}`)
+  e.line(`Date: ${new Date(order.updatedAt).toLocaleString()}`)
+  const served = servedByName(order)
+  if (served) e.line(`Served by: ${served}`)
   e.line(order.table ? `Table: ${order.table.label}` : 'Takeaway')
   e.rule()
 
+  // -------- items --------
   for (const item of order.items) {
     row(`${item.quantity} x ${item.menuItem.name}${item.variant ? ` (${item.variant.name})` : ''}`, money(Number(item.unitPrice) * item.quantity))
     for (const a of item.addons) row(`  + ${a.addon.name}`, money(Number(a.unitPrice) * a.quantity))
   }
   e.rule()
 
+  // -------- totals: exclusive tax shown as an explicit addition; inclusive
+  // (already baked into the subtotal) isn't, to avoid reading as double
+  // charging — it's still fully disclosed in the tax breakdown below --------
   const f = order.financials
   row('Subtotal', money(f.subtotal))
   if (f.discount > 0) row('Discount', `-${money(f.discount)}`)
-  if (f.taxAmount > 0) row('Tax', money(f.taxAmount))
+  if (showsTaxAsAddedOn(order)) row(`Tax (${f.taxRate}%)`, `+${money(f.taxAmount)}`)
   e.bold(true)
   row('TOTAL', money(f.total))
   e.bold(false)
+  e.rule()
 
-  if (order.payments.length > 0) {
-    e.rule()
-    for (const p of order.payments) row(p.paymentMethod.name, money(p.amount))
-  }
+  // -------- payments --------
+  e.line('Payments')
+  if (order.payments.length === 0) e.line('No payment recorded yet.')
+  else for (const p of order.payments) row(p.paymentMethod.name, money(p.amount))
+  e.rule()
 
-  e.newline(2).line(center('Thank you', cols)).newline(4).cut()
+  // -------- tax breakdown (Kenyan law: must be itemised, not just a total) --------
+  const netW = Math.max(8, Math.floor(cols * 0.2))
+  const taxW = Math.max(7, Math.floor(cols * 0.16))
+  const grossW = Math.max(8, Math.floor(cols * 0.2))
+  const labelW = cols - netW - taxW - grossW
+  const taxRow = (label: string, net: string, tax: string, gross: string) =>
+    e.table(
+      [{ width: labelW, align: 'left' }, { width: netW, align: 'right' }, { width: taxW, align: 'right' }, { width: grossW, align: 'right' }],
+      [[label, net, tax, gross]],
+    )
+  e.line('Tax breakdown')
+  taxRow('Rate', 'Net', 'Tax', 'Gross')
+  for (const t of f.taxLines ?? []) taxRow(t.label, money(t.net), money(t.tax), money(t.gross))
+  e.bold(true)
+  taxRow('Total', money(f.net), money(f.taxAmount), money(f.total))
+  e.bold(false)
+  if ((f.zeroRatedAmount ?? 0) > 0) e.line(`Includes zero-rated: ${money(f.zeroRatedAmount!)}`)
+  if ((f.exemptAmount ?? 0) > 0) e.line(`Includes exempt: ${money(f.exemptAmount!)}`)
+  e.rule()
+
+  // -------- footer (location's own, else a default) --------
+  for (const l of receiptFooterText(order).split('\n')) e.line(center(l, cols))
+  e.newline(4).cut()
   return e.encode()
 }
 

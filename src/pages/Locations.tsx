@@ -69,6 +69,12 @@ type LocationRow = {
   canSellServices: boolean
   canSellProducts: boolean
   serveMode: ServeMode
+  receiptHeader: string | null
+  receiptFooter: string | null
+  invoiceHeader: string | null
+  invoiceFooter: string | null
+  quotationHeader: string | null
+  quotationFooter: string | null
   _count: { menuItems: number; employees: number }
 }
 type LocationForm = {
@@ -88,6 +94,12 @@ type LocationForm = {
   canSellServices: boolean
   canSellProducts: boolean
   serveMode: ServeMode
+  receiptHeader: string
+  receiptFooter: string
+  invoiceHeader: string
+  invoiceFooter: string
+  quotationHeader: string
+  quotationFooter: string
 }
 const emptyLocationForm: LocationForm = {
   name: '', type: '', description: '', address: '', managerId: '',
@@ -95,6 +107,7 @@ const emptyLocationForm: LocationForm = {
   isActive: true,
   canSellRooms: true, canSellMenu: true, canSellServices: true, canSellProducts: true,
   serveMode: 'KITCHEN',
+  receiptHeader: '', receiptFooter: '', invoiceHeader: '', invoiceFooter: '', quotationHeader: '', quotationFooter: '',
 }
 
 export default function Locations() {
@@ -156,6 +169,12 @@ export default function Locations() {
       canSellServices: location.canSellServices,
       canSellProducts: location.canSellProducts,
       serveMode: location.serveMode,
+      receiptHeader: location.receiptHeader ?? '',
+      receiptFooter: location.receiptFooter ?? '',
+      invoiceHeader: location.invoiceHeader ?? '',
+      invoiceFooter: location.invoiceFooter ?? '',
+      quotationHeader: location.quotationHeader ?? '',
+      quotationFooter: location.quotationFooter ?? '',
     })
     setShowForm(true)
   }
@@ -363,6 +382,19 @@ export default function Locations() {
               <Field label="Opening Time"><input type="time" value={form.openingTime} onChange={(e) => setForm({ ...form, openingTime: e.target.value })} className="input" /></Field>
               <Field label="Closing Time"><input type="time" value={form.closingTime} onChange={(e) => setForm({ ...form, closingTime: e.target.value })} className="input" /></Field>
             </FieldGroup>
+
+            <div className="mt-6 border-t pt-5">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Printed documents</p>
+              <p className="mb-3 text-xs text-muted-foreground">Optional text this location's receipts, invoices, and quotations print above/below the body. Leave blank to use the default.</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Receipt Header"><textarea rows={2} placeholder="e.g. this branch's own note" value={form.receiptHeader} onChange={(e) => setForm({ ...form, receiptHeader: e.target.value })} className="input" /></Field>
+                <Field label="Receipt Footer"><textarea rows={2} placeholder="e.g. Thank you for your visit!" value={form.receiptFooter} onChange={(e) => setForm({ ...form, receiptFooter: e.target.value })} className="input" /></Field>
+                <Field label="Invoice Header"><textarea rows={2} value={form.invoiceHeader} onChange={(e) => setForm({ ...form, invoiceHeader: e.target.value })} className="input" /></Field>
+                <Field label="Invoice Footer"><textarea rows={2} value={form.invoiceFooter} onChange={(e) => setForm({ ...form, invoiceFooter: e.target.value })} className="input" /></Field>
+                <Field label="Quotation Header"><textarea rows={2} value={form.quotationHeader} onChange={(e) => setForm({ ...form, quotationHeader: e.target.value })} className="input" /></Field>
+                <Field label="Quotation Footer"><textarea rows={2} value={form.quotationFooter} onChange={(e) => setForm({ ...form, quotationFooter: e.target.value })} className="input" /></Field>
+              </div>
+            </div>
 
             <div className="mt-6 border-t pt-5">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selling Permissions</p>
