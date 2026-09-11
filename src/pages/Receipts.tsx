@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuReceiptText, LuSearch, LuWallet } from 'react-icons/lu'
+import { LuBan, LuCalendarDays, LuCircleAlert, LuLoaderCircle, LuMapPin, LuReceiptText, LuSearch, LuWallet } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import { useWorkingLocation } from '@/lib/useWorkingLocation'
+import StatCard from '@/components/ui/StatCard'
 import { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
@@ -12,13 +13,16 @@ type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID'
 type ReceiptRow = ReceiptOrder & { total: number; paid: number; paymentStatus?: PaymentStatus }
 type LocationOption = { id: string; name: string }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
+type PaymentFilter = 'ALL' | 'UNPAID' | 'PARTIAL' | 'PAID'
+type StatusFilter = 'ALL' | 'COMPLETED' | 'CANCELLED'
 
 // Applied to each status fetched (COMPLETED, CANCELLED) — kept in step with
 // the same cap used for the POS Completed/Cancelled tabs and the Approvals
 // history view, so every "recent sales" list in the app behaves the same
 // way. ~100 full order payloads (items/payments/tax breakdown included) run
 // well under 1MB even on a slow connection; 500 would push multiple MB on
-// every page load for no real benefit — nobody scrolls that far back.
+// every page load for no real benefit — nobody scrolls that far back. A
+// narrower date range (below) is the intended way to reach further back.
 const FETCH_LIMIT = 100
 
 const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
@@ -31,6 +35,12 @@ const badgeFor = (row: ReceiptRow) => {
   return { label: 'On credit', cls: 'bg-destructive/10 text-destructive' }
 }
 
+const paymentStatusOf = (row: ReceiptRow): PaymentStatus => {
+  if (row.paymentStatus) return row.paymentStatus
+  const owed = Math.max(0, row.total - row.paid)
+  return owed <= 0.01 ? 'PAID' : row.paid > 0.01 ? 'PARTIAL' : 'UNPAID'
+}
+
 export default function Receipts() {
   const toast = useToast()
   const [orders, setOrders] = useState<ReceiptRow[]>([])
@@ -38,7 +48,10 @@ export default function Receipts() {
   const [profile, setProfile] = useState<ReceiptProfile>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [search, setSearch] = useState('')
-  const [payFilter, setPayFilter] = useState<'ALL' | 'OWING' | 'PAID'>('ALL')
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('ALL')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [receiptId, setReceiptId] = useState<string | null>(null)
@@ -50,15 +63,20 @@ export default function Receipts() {
     setLoading(true)
     setError('')
     try {
-      const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
-      const [completedResponse, cancelledResponse, profileResponse, locationResponse, methodsResponse] = await Promise.all([
-        api<{ orders: ReceiptRow[] }>(`/pos/orders?status=COMPLETED&limit=${FETCH_LIMIT}${query}`),
-        api<{ orders: ReceiptRow[] }>(`/pos/orders?status=CANCELLED&limit=${FETCH_LIMIT}${query}`),
+      let query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
+      if (dateFrom) query += `&from=${dateFrom}`
+      if (dateTo) query += `&to=${dateTo}`
+      // Only pull the statuses actually needed — narrowing the Status filter
+      // to Completed or Cancelled halves the payload instead of fetching
+      // both and throwing one half away client-side.
+      const statuses: ('COMPLETED' | 'CANCELLED')[] = statusFilter === 'ALL' ? ['COMPLETED', 'CANCELLED'] : [statusFilter]
+      const [orderResponses, profileResponse, locationResponse, methodsResponse] = await Promise.all([
+        Promise.all(statuses.map((s) => api<{ orders: ReceiptRow[] }>(`/pos/orders?status=${s}&limit=${FETCH_LIMIT}${query}`))),
         api<{ profile: ReceiptProfile }>('/business-profile'),
         api<{ locations: LocationOption[] }>('/locations'),
         api<{ methods: (PaymentMethod & { code: string })[] }>('/payment-methods?activeOnly=true'),
       ])
-      const merged = [...completedResponse.orders, ...cancelledResponse.orders].sort(
+      const merged = orderResponses.flatMap((r) => r.orders).sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       )
       setOrders(merged)
@@ -72,21 +90,25 @@ export default function Receipts() {
     } finally {
       setLoading(false)
     }
-  }, [effectiveLocationId, toast])
+  }, [effectiveLocationId, statusFilter, dateFrom, dateTo, toast])
 
   useEffect(() => { void load() }, [load])
 
-  const owingCount = orders.filter((o) => o.status !== 'CANCELLED' && Math.max(0, o.total - o.paid) > 0.01).length
-
   const visible = orders.filter((order) => {
-    if (payFilter !== 'ALL' && order.status === 'CANCELLED') return false
-    const owed = Math.max(0, order.total - order.paid) > 0.01
-    if (payFilter === 'OWING' && !owed) return false
-    if (payFilter === 'PAID' && owed) return false
+    if (paymentFilter !== 'ALL') {
+      if (order.status === 'CANCELLED') return false
+      if (paymentStatusOf(order) !== paymentFilter) return false
+    }
     if (!search.trim()) return true
     const query = search.trim().toLowerCase()
     return String(order.orderNumber).includes(query) || (order.table?.label ?? 'takeaway').toLowerCase().includes(query)
   })
+
+  const completedVisible = visible.filter((o) => o.status !== 'CANCELLED')
+  const cancelledVisible = visible.filter((o) => o.status === 'CANCELLED')
+  const totalSales = completedVisible.reduce((s, o) => s + o.total, 0)
+  const totalCollected = completedVisible.reduce((s, o) => s + o.paid, 0)
+  const totalOutstanding = completedVisible.reduce((s, o) => s + Math.max(0, o.total - o.paid), 0)
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 lg:px-10">
@@ -96,28 +118,70 @@ export default function Receipts() {
         <p className="mt-2 text-sm text-muted-foreground">Every completed sale — plus cancelled orders, kept here for the record — with the full itemized breakdown and payment history.</p>
       </header>
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label className="relative block max-w-sm flex-1">
-          <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order # or table…" className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" />
+      <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard index={0} icon={<LuReceiptText className="size-4" />} label="Sales" value={formatKes(totalSales)} hint={`${completedVisible.length} order${completedVisible.length === 1 ? '' : 's'}`} />
+        <StatCard tone="success" icon={<LuWallet className="size-4" />} label="Collected" value={formatKes(totalCollected)} />
+        <StatCard tone="warn" icon={<LuWallet className="size-4" />} label="Outstanding" value={formatKes(totalOutstanding)} />
+        <StatCard tone="danger" icon={<LuBan className="size-4" />} label="Cancelled" value={String(cancelledVisible.length)} hint={formatKes(cancelledVisible.reduce((s, o) => s + o.total, 0))} />
+      </section>
+
+      <div className="mt-7 flex flex-wrap items-end gap-3">
+        <label className="flex min-w-[200px] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Search
+          <span className="relative">
+            <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Order # or table…" className="input pl-9" />
+          </span>
         </label>
-        <div className="flex flex-wrap gap-1.5">
-          {([['ALL', 'All'], ['OWING', 'Owing'], ['PAID', 'Fully paid']] as const).map(([value, label]) => (
-            <button
-              key={value}
-              onClick={() => setPayFilter(value)}
-              className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold', payFilter === value ? 'border-secondary bg-secondary text-secondary-foreground' : 'text-muted-foreground hover:bg-muted')}
-            >
-              {label}{value === 'OWING' && owingCount > 0 && ` (${owingCount})`}
-            </button>
-          ))}
-        </div>
-        {!fixedLocation && pickableLocations.length > 0 && (
-          <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="rounded-sm border bg-card px-3 py-2.5 text-sm shadow-sm outline-none">
-            <option value="">All locations</option>
-            {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Payment status
+          <select aria-label="Filter by payment status" value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value as PaymentFilter)} className="input">
+            <option value="ALL">All payment statuses</option>
+            <option value="UNPAID">Unpaid</option>
+            <option value="PARTIAL">Partially paid</option>
+            <option value="PAID">Fully paid</option>
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          Status
+          <select aria-label="Filter by order status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as StatusFilter)} className="input">
+            <option value="ALL">All statuses</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </label>
+
+        {fixedLocation ? (
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Location
+            <span className="input flex items-center gap-1.5 text-muted-foreground"><LuMapPin className="size-3.5" /> {fixedLocation.name}</span>
+          </label>
+        ) : pickableLocations.length > 0 && (
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+            Location
+            <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="input">
+              <option value="">All locations</option>
+              {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </label>
         )}
+
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          From
+          <span className="relative">
+            <LuCalendarDays className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className="input pl-9" />
+          </span>
+        </label>
+        <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
+          To
+          <span className="relative">
+            <LuCalendarDays className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className="input pl-9" />
+          </span>
+        </label>
       </div>
 
       {error && (
@@ -130,9 +194,9 @@ export default function Receipts() {
       {loading ? (
         <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading receipts…</div>
       ) : visible.length === 0 ? (
-        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No sales {search.trim() || payFilter !== 'ALL' ? 'match this view' : 'yet'}.</div>
+        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground">No sales {search.trim() || paymentFilter !== 'ALL' || statusFilter !== 'ALL' || dateFrom || dateTo ? 'match this view' : 'yet'}.</div>
       ) : (
-        <section className="mt-7 overflow-hidden rounded-sm border bg-card shadow-sm">
+        <section className="mt-7 overflow-hidden rounded-sm border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
