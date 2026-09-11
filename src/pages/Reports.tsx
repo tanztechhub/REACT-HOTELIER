@@ -1,32 +1,126 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LuCalendarDays, LuCircleAlert, LuLoaderCircle, LuReceiptText, LuTrendingUp, LuTriangleAlert, LuUsers, LuWallet } from 'react-icons/lu'
+import {
+  LuBanknote,
+  LuCalendarDays,
+  LuChevronLeft,
+  LuChevronRight,
+  LuCircleAlert,
+  LuHandCoins,
+  LuLoaderCircle,
+  LuPackageX,
+  LuReceiptText,
+  LuShoppingBag,
+  LuTrendingUp,
+  LuTriangleAlert,
+  LuUndo2,
+  LuUsers,
+  LuWallet,
+} from 'react-icons/lu'
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import StatCard from '@/components/ui/StatCard'
+import { cn } from '@/lib/utils'
 
-type MethodBucket = { method: string; count: number; total: number }
-type CashierBucket = { name: string; count: number; total: number }
-type OrderRow = { id: string; orderNumber: number; table: { label: string } | null; total: number; paid: number; servedAt: string | null; updatedAt: string }
-type OutstandingRow = { id: string; orderNumber: number; table: { label: string } | null; total: number; paid: number; balance: number }
+type Period = 'day' | 'week' | 'month' | 'custom'
+type Location = { id: string; name: string }
+
+type Cards = {
+  totalRevenue: number
+  netRevenue: number
+  totalExpenses: number
+  netProfit: number
+  capitalInvested: number
+  transactions: number
+  averageSale: number
+  itemsSold: number
+  menuOrdersCompleted: number
+}
+type RevenueBreakdown = {
+  posSalesCash: number
+  folioDepositsCash: number
+  folioSettlementsCash: number
+  serviceCenterCash: number
+  totalRevenue: number
+  taxCollected: number
+  discountsGiven: number
+  completedSalesValue: number
+  cogs: number
+  unresolvedCostLines: number
+  netRevenue: number
+  serviceCenterExcludedByLocationFilter: boolean
+}
+type TopItem = { name: string; qty: number; revenue: number }
+type CountBucket = { name: string; count: number; total: number }
+type TrendPoint = { date: string; revenue: number }
+type LocationBucket = {
+  locationId: string | null
+  name: string
+  transactions: number
+  revenue: number
+  avgSale: number
+  percentOfTotal: number
+  expenses: number
+  netProfit: number
+  profitPercent: number
+}
+type MethodBucket = { name: string; count: number; total: number; percentOfTotal: number }
+type EmployeeBucket = { name: string; branch: string; count: number; total: number; percentOfTotal: number }
+type Debtors = {
+  total: number
+  customers: { total: number; top: { id: string; name: string; balance: number }[] }
+  unsettledFolios: { total: number; top: { folioNo: string; reservationNo: string; guestName: string; balance: number }[] }
+}
+type Creditors = { total: number; top: { id: string; name: string; balance: number }[] }
+type TaxLine = { key: string; label: string; treatment: string; rate: number; mode: string; net: number; tax: number; gross: number }
+
 type SalesReport = {
-  range: { from: string; to: string }
-  summary: { totalRevenue: number; completedOrders: number; averageOrderValue: number; outstandingBalance: number; outstandingOrders: number }
-  byMethod: MethodBucket[]
-  byCashier: CashierBucket[]
-  orders: OrderRow[]
-  outstanding: OutstandingRow[]
+  range: { period: Period; start: string; end: string }
+  cards: Cards
+  revenueBreakdown: RevenueBreakdown
+  topItems: TopItem[]
+  expensesByCategory: CountBucket[]
+  purchasesBySupplier: CountBucket[]
+  trend: TrendPoint[]
+  salesByLocation: LocationBucket[]
+  byPaymentMethod: MethodBucket[]
+  byEmployee: EmployeeBucket[]
+  voided: { count: number; value: number }
+  returns: { supported: boolean; count: number; value: number; note: string }
+  cancelledPurchases: { count: number; value: number }
+  debtors: Debtors
+  creditors: Creditors
+  expectedProfit: number
+  taxBreakdown: TaxLine[]
 }
 
-const formatKes = (value: number) => `KES ${value.toLocaleString('en-KE', { maximumFractionDigits: 0 })}`
-// Local calendar date, not UTC — the backend parses "YYYY-MM-DD" as local
-// midnight, so a UTC-based date here can disagree with it near midnight.
+const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const toLocalIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const todayIso = () => toLocalIso(new Date())
 
+function stepAnchor(period: 'day' | 'week' | 'month', iso: string, dir: 1 | -1) {
+  const d = new Date(`${iso}T00:00:00`)
+  if (period === 'day') d.setDate(d.getDate() + dir)
+  else if (period === 'week') d.setDate(d.getDate() + dir * 7)
+  else d.setMonth(d.getMonth() + dir)
+  return toLocalIso(d)
+}
+
+function rangeLabel(period: Period, startIso: string, endIso: string) {
+  const s = new Date(startIso)
+  const e = new Date(endIso)
+  if (period === 'day') return s.toLocaleDateString('en-KE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  return `${s.toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })} – ${e.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })}`
+}
+
 export default function Reports() {
   const toast = useToast()
-  const [from, setFrom] = useState(todayIso())
-  const [to, setTo] = useState(todayIso())
+  const [period, setPeriod] = useState<Period>('day')
+  const [anchor, setAnchor] = useState(todayIso())
+  const [customFrom, setCustomFrom] = useState(todayIso())
+  const [customTo, setCustomTo] = useState(todayIso())
+  const [locationId, setLocationId] = useState('')
+  const [locations, setLocations] = useState<Location[]>([])
   const [report, setReport] = useState<SalesReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -35,7 +129,10 @@ export default function Reports() {
     setLoading(true)
     setError('')
     try {
-      const response = await api<SalesReport>(`/reports/sales?from=${from}&to=${to}`)
+      const query = new URLSearchParams({ period })
+      if (period === 'custom') { query.set('from', customFrom); query.set('to', customTo) } else { query.set('date', anchor) }
+      if (locationId) query.set('locationId', locationId)
+      const response = await api<SalesReport>(`/reports/sales?${query}`)
       setReport(response)
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not load the sales report'
@@ -44,158 +141,346 @@ export default function Reports() {
     } finally {
       setLoading(false)
     }
-  }, [from, to, toast])
+  }, [period, anchor, customFrom, customTo, locationId, toast])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => { api<{ locations: Location[] }>('/locations').then((r) => setLocations(r.locations)).catch(() => {}) }, [])
 
-  function setQuickRange(days: number) {
-    const end = new Date()
-    const start = new Date()
-    start.setDate(start.getDate() - (days - 1))
-    setFrom(toLocalIso(start))
-    setTo(toLocalIso(end))
-  }
+  const cogsNote = report && report.revenueBreakdown.unresolvedCostLines > 0
+    ? `Cost of goods sold could not be resolved for ${report.revenueBreakdown.unresolvedCostLines} sold line${report.revenueBreakdown.unresolvedCostLines === 1 ? '' : 's'} (a service, or a menu item with no product/recipe linked) — those count as zero cost here.`
+    : null
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 lg:px-10">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-secondary">Reports</p>
-          <h1 className="mt-1 font-display text-3xl font-semibold">Sales Report</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Till reconciliation — money collected, by method and by cashier.</p>
-        </div>
+    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+      <header>
+        <p className="text-sm font-semibold text-secondary">Reports</p>
+        <h1 className="mt-1 font-display text-3xl font-semibold">Sales Report</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Pick a period — every figure below, from the financial overview to the breakdowns, resolves to it.</p>
       </header>
 
-      <div className="mt-6 flex flex-col gap-3 rounded-sm border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <LuCalendarDays className="text-muted-foreground" />
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-sm border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
-          <span className="text-sm text-muted-foreground">to</span>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-sm border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setQuickRange(1)} className="rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">Today</button>
-          <button onClick={() => setQuickRange(7)} className="rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">Last 7 days</button>
-          <button onClick={() => setQuickRange(30)} className="rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">Last 30 days</button>
+      <div className="mt-6 space-y-3 rounded-sm border bg-card p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex rounded-sm border p-0.5">
+            {(['day', 'week', 'month', 'custom'] as Period[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={cn('rounded-sm px-3 py-1.5 text-xs font-semibold uppercase tracking-wide', period === p ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted')}
+              >
+                {p === 'day' ? 'Daily' : p === 'week' ? 'Weekly' : p === 'month' ? 'Monthly' : 'Range'}
+              </button>
+            ))}
+          </div>
+
+          {period === 'custom' ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <LuCalendarDays className="text-muted-foreground" />
+              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="rounded-sm border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              <span className="text-sm text-muted-foreground">to</span>
+              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="rounded-sm border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-1">
+              <button onClick={() => setAnchor((a) => stepAnchor(period, a, -1))} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuChevronLeft /></button>
+              <input type="date" value={anchor} onChange={(e) => setAnchor(e.target.value)} className="rounded-sm border bg-background px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring" />
+              <button onClick={() => setAnchor((a) => stepAnchor(period, a, 1))} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuChevronRight /></button>
+              {report && <span className="ml-2 text-sm font-medium text-muted-foreground">{rangeLabel(period, report.range.start, report.range.end)}</span>}
+            </div>
+          )}
+
+          <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="ml-auto rounded-sm border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring">
+            <option value="">All Locations</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
         </div>
       </div>
 
-      {error && (
-        <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">
-          <LuCircleAlert />
-          {error}
-        </div>
-      )}
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
 
       {loading || !report ? (
         <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading report…</div>
       ) : (
         <>
-          <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <section className="mt-7 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {([
-              ['Revenue collected', formatKes(report.summary.totalRevenue), <LuWallet key="a" />, false],
-              ['Completed orders', report.summary.completedOrders, <LuReceiptText key="b" />, false],
-              ['Average order value', formatKes(report.summary.averageOrderValue), <LuTrendingUp key="c" />, false],
-              ['Outstanding balance', formatKes(report.summary.outstandingBalance), <LuTriangleAlert key="d" />, report.summary.outstandingBalance > 0],
-            ] as const).map(([label, value, icon, warn], i) => (
-              <StatCard key={label} index={i} tone={warn ? 'warn' : undefined} label={label} value={value} icon={icon} />
-            ))}
+              ['Total Revenue', formatKes(report.cards.totalRevenue), <LuWallet key="a" />],
+              ['Net Revenue', formatKes(report.cards.netRevenue), <LuTrendingUp key="b" />],
+              ['Total Expenses', formatKes(report.cards.totalExpenses), <LuReceiptText key="c" />],
+              ['Net Profit', formatKes(report.cards.netProfit), <LuBanknote key="d" />],
+              ['Capital Invested', formatKes(report.cards.capitalInvested), <LuHandCoins key="e" />],
+            ] as const).map(([label, value, icon], i) => <StatCard key={label} index={i} label={label} value={value} icon={icon} />)}
+          </section>
+          <section className="mt-3 grid gap-3 sm:grid-cols-3">
+            {([
+              ['Transactions', report.cards.transactions, <LuShoppingBag key="f" />],
+              ['Average Sale', formatKes(report.cards.averageSale), <LuTrendingUp key="g" />],
+              ['Items Sold', report.cards.itemsSold, <LuShoppingBag key="h" />],
+            ] as const).map(([label, value, icon], i) => <StatCard key={label} index={i + 5} label={label} value={value} icon={icon} />)}
+          </section>
+          <section className="mt-3 grid gap-3 sm:grid-cols-1">
+            <StatCard index={8} label="Menu Orders Completed" value={report.cards.menuOrdersCompleted} icon={<LuReceiptText />} />
           </section>
 
-          <div className="mt-7 grid gap-6 lg:grid-cols-2">
-            <section className="overflow-hidden rounded-sm border bg-card shadow-sm">
-              <header className="border-b p-4"><h2 className="font-semibold">By payment method</h2></header>
-              {report.byMethod.length === 0 ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">No payments in this range.</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr><th className="px-4 py-2.5">Method</th><th className="px-4 py-2.5">Payments</th><th className="px-4 py-2.5 text-right">Total</th></tr>
-                  </thead>
-                  <tbody>
-                    {report.byMethod.map((m) => (
-                      <tr key={m.method} className="border-t">
-                        <td className="px-4 py-3 font-medium">{m.method}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{m.count}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{formatKes(m.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </section>
+          {/* Revenue & Expense Breakdown */}
+          <section className="mt-7 overflow-hidden rounded-sm border bg-card shadow-sm">
+            <header className="border-b p-4"><h2 className="font-semibold">Revenue &amp; Expense Breakdown</h2><p className="text-xs text-muted-foreground">Every figure above traces back to something real — here's exactly where it comes from.</p></header>
+            <div className="space-y-5 p-4">
+              <div className="rounded-sm border bg-muted/30 p-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Revenue — where the cash came from</p>
+                <p className="mt-1">
+                  <span className="font-semibold">{formatKes(report.revenueBreakdown.posSalesCash)}</span> POS sales
+                  {' + '}<span className="font-semibold">{formatKes(report.revenueBreakdown.folioDepositsCash)}</span> room deposits
+                  {' + '}<span className="font-semibold">{formatKes(report.revenueBreakdown.folioSettlementsCash)}</span> room checkouts
+                  {' + '}<span className="font-semibold">{formatKes(report.revenueBreakdown.serviceCenterCash)}</span> service-center
+                  {' = '}<span className="font-semibold text-secondary">{formatKes(report.revenueBreakdown.totalRevenue)}</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Only cash actually received counts — a credit sale's unpaid balance isn't revenue yet.{report.revenueBreakdown.serviceCenterExcludedByLocationFilter && ' Service-center bookings aren\'t location-tagged yet, so they\'re left out of this location-filtered view.'}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-sm border bg-card p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tax Collected</p>
+                    <p className="mt-0.5 font-semibold">{formatKes(report.revenueBreakdown.taxCollected)}</p>
+                  </div>
+                  <div className="rounded-sm border bg-card p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discounts Given</p>
+                    <p className="mt-0.5 font-semibold">{formatKes(report.revenueBreakdown.discountsGiven)}</p>
+                  </div>
+                </div>
+              </div>
 
-            <section className="overflow-hidden rounded-sm border bg-card shadow-sm">
-              <header className="flex items-center gap-2 border-b p-4"><LuUsers className="size-4 text-secondary" /><h2 className="font-semibold">By cashier</h2></header>
-              {report.byCashier.length === 0 ? (
-                <p className="p-6 text-center text-sm text-muted-foreground">No payments in this range.</p>
-              ) : (
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr><th className="px-4 py-2.5">Cashier</th><th className="px-4 py-2.5">Payments</th><th className="px-4 py-2.5 text-right">Total</th></tr>
-                  </thead>
-                  <tbody>
-                    {report.byCashier.map((c) => (
-                      <tr key={c.name} className="border-t">
-                        <td className="px-4 py-3 font-medium">{c.name}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{c.count}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{formatKes(c.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              {report.topItems.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top items sold</p>
+                  <div className="overflow-hidden rounded-sm border">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2">Item</th><th className="px-4 py-2 text-right">Qty Sold</th><th className="px-4 py-2 text-right">Revenue</th></tr></thead>
+                      <tbody>{report.topItems.map((i, idx) => (
+                        <tr key={i.name} className="border-t"><td className="px-4 py-2">{idx + 1}. {i.name}</td><td className="px-4 py-2 text-right tabular-nums">{i.qty} sold</td><td className="px-4 py-2 text-right tabular-nums">{formatKes(i.revenue)}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                </div>
               )}
-            </section>
-          </div>
 
-          {report.outstanding.length > 0 && (
-            <section className="mt-6 overflow-hidden rounded-sm border border-warning/30 bg-card shadow-sm">
-              <header className="flex items-center gap-2 border-b border-warning/30 bg-warning/5 p-4"><LuTriangleAlert className="size-4 text-warning" /><h2 className="font-semibold">Unsettled bills right now</h2></header>
+              <div className="rounded-sm border bg-muted/30 p-3 text-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Net Revenue — profit on goods sold</p>
+                <p className="mt-1">
+                  <span className="font-semibold">{formatKes(report.revenueBreakdown.completedSalesValue)}</span> sold this period
+                  {' − '}<span className="font-semibold">{formatKes(report.revenueBreakdown.cogs)}</span> cost of goods sold
+                  {' = '}<span className="font-semibold text-secondary">{formatKes(report.revenueBreakdown.netRevenue)}</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">Based on everything completed/sold this period, whether paid in cash or settled on credit — a different base than the cash Total Revenue above.{cogsNote ? ` ${cogsNote}` : ''}</p>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Expenses — where the money went ({formatKes(report.cards.totalExpenses)})</p>
+                {report.expensesByCategory.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No expenses recorded this period.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-sm border">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2">Category</th><th className="px-4 py-2 text-right">Times Paid</th><th className="px-4 py-2 text-right">Total</th><th className="px-4 py-2 text-right">% of Total</th></tr></thead>
+                      <tbody>{report.expensesByCategory.map((c) => (
+                        <tr key={c.name} className="border-t"><td className="px-4 py-2 font-medium">{c.name}</td><td className="px-4 py-2 text-right tabular-nums">{c.count}</td><td className="px-4 py-2 text-right tabular-nums font-semibold">{formatKes(c.total)}</td><td className="px-4 py-2 text-right tabular-nums">{report.cards.totalExpenses ? ((c.total / report.cards.totalExpenses) * 100).toFixed(1) : '0.0'}%</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">Supplier payments (Capital Invested) aren't counted here — see the card above.</p>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Purchases by supplier — Capital Invested ({formatKes(report.cards.capitalInvested)})</p>
+                {report.purchasesBySupplier.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No stock received this period.</p>
+                ) : (
+                  <div className="overflow-hidden rounded-sm border">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2">Supplier</th><th className="px-4 py-2 text-right">Deliveries</th><th className="px-4 py-2 text-right">Goods Received Value</th></tr></thead>
+                      <tbody>{report.purchasesBySupplier.map((s) => (
+                        <tr key={s.name} className="border-t"><td className="px-4 py-2 font-medium">{s.name}</td><td className="px-4 py-2 text-right tabular-nums">{s.count}</td><td className="px-4 py-2 text-right tabular-nums font-semibold">{formatKes(s.total)}</td></tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-muted-foreground">This is what came in from suppliers this period — Capital Invested above is what was actually paid to them, which can differ.</p>
+              </div>
+            </div>
+          </section>
+
+          {/* Trend */}
+          <section className="mt-6 overflow-hidden rounded-sm border bg-card p-4 shadow-sm">
+            <h2 className="font-semibold">Total Revenue Trend — 5 days before and after this period's end</h2>
+            <div className="mt-4 h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={report.trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="date" tickFormatter={(d: string) => new Date(d).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' })} tick={{ fontSize: 12 }} />
+                  <YAxis tickFormatter={(v: number) => v.toLocaleString()} tick={{ fontSize: 12 }} width={70} />
+                  <Tooltip formatter={(v) => formatKes(Number(v))} labelFormatter={(d) => new Date(String(d)).toLocaleDateString('en-KE', { weekday: 'short', month: 'short', day: 'numeric' })} />
+                  <Line type="monotone" dataKey="revenue" stroke="var(--secondary)" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          {/* Sales by Location */}
+          <BreakdownSection
+            title="Sales by Location"
+            rows={report.salesByLocation.map((l) => ({ key: l.locationId ?? 'unassigned', label: l.name, value: l.revenue, percent: l.percentOfTotal }))}
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Location</th><th className="px-4 py-2.5 text-right">Transactions</th><th className="px-4 py-2.5 text-right">Revenue</th><th className="px-4 py-2.5 text-right">Avg Sale</th><th className="px-4 py-2.5 text-right">Net Profit</th><th className="px-4 py-2.5 text-right">Profit %</th><th className="px-4 py-2.5 text-right">% of Total</th></tr></thead>
+              <tbody>{report.salesByLocation.map((l) => (
+                <tr key={l.locationId ?? 'unassigned'} className="border-t">
+                  <td className="px-4 py-2.5 font-medium">{l.name}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{l.transactions}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(l.revenue)}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{formatKes(l.avgSale)}</td>
+                  <td className={cn('px-4 py-2.5 text-right tabular-nums font-semibold', l.netProfit >= 0 ? 'text-success' : 'text-destructive')}>{formatKes(l.netProfit)}</td>
+                  <td className={cn('px-4 py-2.5 text-right tabular-nums', l.netProfit >= 0 ? 'text-success' : 'text-destructive')}>{l.profitPercent.toFixed(1)}%</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums">{l.percentOfTotal.toFixed(1)}%</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </BreakdownSection>
+
+          {/* Sales by Payment Method */}
+          <BreakdownSection
+            title="Sales by Payment Method"
+            note="Money actually received — an unpaid balance isn't counted toward any method yet."
+            rows={report.byPaymentMethod.map((m) => ({ key: m.name, label: m.name, value: m.total, percent: m.percentOfTotal }))}
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Method</th><th className="px-4 py-2.5 text-right">Payments</th><th className="px-4 py-2.5 text-right">Total</th><th className="px-4 py-2.5 text-right">% of Total</th></tr></thead>
+              <tbody>{report.byPaymentMethod.map((m) => (
+                <tr key={m.name} className="border-t"><td className="px-4 py-2.5 font-medium">{m.name}</td><td className="px-4 py-2.5 text-right tabular-nums">{m.count}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(m.total)}</td><td className="px-4 py-2.5 text-right tabular-nums">{m.percentOfTotal.toFixed(1)}%</td></tr>
+              ))}</tbody>
+            </table>
+          </BreakdownSection>
+
+          {/* Sales by Employee */}
+          <BreakdownSection
+            title="Sales by Employee"
+            rows={report.byEmployee.map((e) => ({ key: e.name, label: e.name, value: e.total, percent: e.percentOfTotal }))}
+          >
+            <table className="w-full text-left text-sm">
+              <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Employee</th><th className="px-4 py-2.5">Branch</th><th className="px-4 py-2.5 text-right">Transactions</th><th className="px-4 py-2.5 text-right">Revenue</th><th className="px-4 py-2.5 text-right">Avg Sale</th><th className="px-4 py-2.5 text-right">% of Total</th></tr></thead>
+              <tbody>{report.byEmployee.map((e) => (
+                <tr key={e.name} className="border-t"><td className="px-4 py-2.5 font-medium">{e.name}</td><td className="px-4 py-2.5 text-muted-foreground">{e.branch}</td><td className="px-4 py-2.5 text-right tabular-nums">{e.count}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(e.total)}</td><td className="px-4 py-2.5 text-right tabular-nums">{formatKes(e.count ? e.total / e.count : 0)}</td><td className="px-4 py-2.5 text-right tabular-nums">{e.percentOfTotal.toFixed(1)}%</td></tr>
+              ))}</tbody>
+            </table>
+          </BreakdownSection>
+
+          {/* Voided sales & Returns */}
+          <section className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-sm border bg-card p-4 shadow-sm">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><LuPackageX className="size-3.5" /> Voided Sales</p>
+              <p className="mt-1 text-2xl font-semibold">{report.voided.count}</p>
+              <p className="text-sm text-muted-foreground">Worth {formatKes(report.voided.value)} — removed entirely from every figure above.</p>
+            </div>
+            <div className="rounded-sm border bg-card p-4 shadow-sm">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><LuUndo2 className="size-3.5" /> Processed Returns</p>
+              <p className="mt-1 text-2xl font-semibold">{report.returns.count}</p>
+              <p className="text-sm text-muted-foreground">{report.returns.note}</p>
+            </div>
+          </section>
+
+          {/* Cancelled purchases */}
+          <section className="mt-4 rounded-sm border bg-card p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cancelled Purchases</p>
+            <p className="mt-1 text-2xl font-semibold">{report.cancelledPurchases.count}</p>
+            <p className="text-sm text-muted-foreground">Worth {formatKes(report.cancelledPurchases.value)} — never counted toward capital invested or supplier spend.</p>
+          </section>
+
+          {/* Debtors, Creditors & Expected Profit */}
+          <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
+            <header className="border-b p-4"><h2 className="font-semibold">Debtors, Creditors &amp; Expected Profit</h2><p className="text-xs text-muted-foreground">A live snapshot as of today — not scoped to the period selected above.</p></header>
+            <div className="grid gap-3 p-4 sm:grid-cols-3">
+              <div className="rounded-sm border bg-secondary/5 p-4">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-secondary"><LuUsers className="size-3.5" /> Debtors</p>
+                <p className="mt-1 text-2xl font-semibold">{formatKes(report.debtors.total)}</p>
+                <p className="text-xs text-muted-foreground">Unpaid balances owed to you — customer credit + unsettled room bills</p>
+              </div>
+              <div className="rounded-sm border bg-destructive/5 p-4">
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-destructive"><LuTriangleAlert className="size-3.5" /> Creditors</p>
+                <p className="mt-1 text-2xl font-semibold">{formatKes(report.creditors.total)}</p>
+                <p className="text-xs text-muted-foreground">Unpaid balances you owe suppliers — {report.creditors.top.length} supplier{report.creditors.top.length === 1 ? '' : 's'}</p>
+              </div>
+              <div className={cn('rounded-sm border p-4', report.expectedProfit >= 0 ? 'bg-success/5' : 'bg-destructive/5')}>
+                <p className={cn('flex items-center gap-2 text-xs font-semibold uppercase tracking-wide', report.expectedProfit >= 0 ? 'text-success' : 'text-destructive')}><LuTrendingUp className="size-3.5" /> Expected Profit</p>
+                <p className="mt-1 text-2xl font-semibold">{formatKes(report.expectedProfit)}</p>
+                <p className="text-xs text-muted-foreground">Net Profit + money owed to you − money you owe</p>
+              </div>
+            </div>
+            <div className="grid gap-4 border-t p-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who owes you</p>
+                {report.debtors.customers.top.length === 0 && report.debtors.unsettledFolios.top.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nobody owes you right now.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {report.debtors.customers.top.map((c) => <RowLine key={c.id} label={c.name} value={formatKes(c.balance)} />)}
+                    {report.debtors.unsettledFolios.top.map((f) => <RowLine key={f.folioNo} label={`${f.guestName} (${f.reservationNo})`} value={formatKes(f.balance)} />)}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who you owe</p>
+                {report.creditors.top.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">You don't owe any supplier right now.</p>
+                ) : (
+                  <div className="space-y-1.5">{report.creditors.top.map((s) => <RowLine key={s.id} label={s.name} value={formatKes(s.balance)} />)}</div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Tax breakdown */}
+          {report.taxBreakdown.length > 0 && (
+            <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
+              <header className="border-b p-4"><h2 className="font-semibold">Tax Breakdown</h2><p className="text-xs text-muted-foreground">Tax collected this period, by rate — see the standalone Products report for a per-item view.</p></header>
               <table className="w-full text-left text-sm">
-                <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr><th className="px-4 py-2.5">Order</th><th className="px-4 py-2.5">Table</th><th className="px-4 py-2.5 text-right">Total</th><th className="px-4 py-2.5 text-right">Paid</th><th className="px-4 py-2.5 text-right">Balance</th></tr>
-                </thead>
-                <tbody>
-                  {report.outstanding.map((o) => (
-                    <tr key={o.id} className="border-t">
-                      <td className="px-4 py-3 font-medium">#{o.orderNumber}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{o.table?.label ?? 'Takeaway'}</td>
-                      <td className="px-4 py-3 text-right">{formatKes(o.total)}</td>
-                      <td className="px-4 py-3 text-right text-success">{formatKes(o.paid)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-warning">{formatKes(o.balance)}</td>
-                    </tr>
-                  ))}
-                </tbody>
+                <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Treatment</th><th className="px-4 py-2.5 text-right">Net</th><th className="px-4 py-2.5 text-right">Tax</th><th className="px-4 py-2.5 text-right">Gross</th></tr></thead>
+                <tbody>{report.taxBreakdown.map((t) => (
+                  <tr key={t.key} className="border-t"><td className="px-4 py-2.5 font-medium">{t.label}</td><td className="px-4 py-2.5 text-right tabular-nums">{formatKes(t.net)}</td><td className="px-4 py-2.5 text-right tabular-nums">{formatKes(t.tax)}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(t.gross)}</td></tr>
+                ))}</tbody>
               </table>
             </section>
           )}
-
-          <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
-            <header className="border-b p-4"><h2 className="font-semibold">Completed orders in range</h2></header>
-            {report.orders.length === 0 ? (
-              <p className="p-10 text-center text-sm text-muted-foreground">No orders were completed in this range.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr><th className="px-4 py-2.5">Order</th><th className="px-4 py-2.5">Table</th><th className="px-4 py-2.5">Completed</th><th className="px-4 py-2.5 text-right">Total</th></tr>
-                  </thead>
-                  <tbody>
-                    {report.orders.map((o) => (
-                      <tr key={o.id} className="border-t">
-                        <td className="px-4 py-3 font-medium">#{o.orderNumber}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{o.table?.label ?? 'Takeaway'}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{new Date(o.updatedAt).toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{formatKes(o.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </>
       )}
+    </div>
+  )
+}
+
+function BreakdownSection({ title, note, rows, children }: { title: string; note?: string; rows: { key: string; label: string; value: number; percent: number }[]; children: React.ReactNode }) {
+  return (
+    <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
+      <header className="border-b p-4"><h2 className="font-semibold">{title}</h2>{note && <p className="text-xs text-muted-foreground">{note}</p>}</header>
+      {rows.length === 0 ? (
+        <p className="p-6 text-center text-sm text-muted-foreground">No activity in this period.</p>
+      ) : (
+        <>
+          <div className="space-y-3 p-4">
+            {rows.map((r) => (
+              <div key={r.key}>
+                <div className="flex items-center justify-between text-sm"><span className="font-medium">{r.label}</span><span className="tabular-nums font-semibold">{formatKes(r.value)}</span></div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-secondary" style={{ width: `${Math.min(100, Math.max(0, r.percent))}%` }} /></div>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-x-auto border-t">{children}</div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function RowLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-sm border bg-muted/30 px-3 py-2 text-sm">
+      <span className="truncate">{label}</span>
+      <span className="shrink-0 font-semibold tabular-nums">{value}</span>
     </div>
   )
 }
