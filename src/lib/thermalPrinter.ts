@@ -76,10 +76,25 @@ export async function pairUsbPrinter(): Promise<string> {
   return device.productName || `USB ${device.vendorId.toString(16)}:${device.productId.toString(16)}`
 }
 
+// The message for both failure points below: a printer that already has a
+// working Windows/macOS driver — i.e. one that shows up in the OS print
+// list and prints fine from other apps — has its USB interface held by that
+// driver, and the OS will not also hand it to the browser. This is not a
+// bug to work around; it's WebUSB's whole security model. The fix is either
+// the Local print bridge (goes through the driver, not around it) or
+// rebinding the device to WinUSB with Zadig (Windows-only, and it then
+// stops appearing as a normal Windows printer).
+const DRIVER_HELD_MESSAGE =
+  'This printer already has a driver installed (it shows up in Windows’ own printer list), so the browser isn’t allowed to open it directly — that’s not fixable from here. Switch Connection type to “Local print bridge” in Settings → Receipt Printer, which prints through the driver instead of around it.'
+
 async function openUsbEndpoint() {
   const device = (await navigator.usb.getDevices())[0]
   if (!device) throw new Error('No USB printer connected. Open Settings → Receipt printer to connect one.')
-  await device.open()
+  try {
+    await device.open()
+  } catch {
+    throw new Error(DRIVER_HELD_MESSAGE)
+  }
   if (device.configuration === null) await device.selectConfiguration(1)
   for (const cfg of device.configurations) {
     for (const iface of cfg.interfaces) {
@@ -89,7 +104,7 @@ async function openUsbEndpoint() {
         try {
           await device.claimInterface(iface.interfaceNumber)
         } catch {
-          throw new Error('Windows is holding this printer through its driver, so the browser can’t use it. Set Connection type to "Browser print dialog", or use a driverless/WinUSB setup.')
+          throw new Error(DRIVER_HELD_MESSAGE)
         }
         return { device, endpoint: out.endpointNumber, iface: iface.interfaceNumber }
       }
