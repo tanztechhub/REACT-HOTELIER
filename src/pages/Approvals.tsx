@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LuBadgeCheck, LuCircleAlert, LuClock3, LuLoaderCircle, LuReceiptText, LuUserRound, LuX } from 'react-icons/lu'
+import { LuBadgeCheck, LuCircleAlert, LuClock3, LuLoaderCircle, LuLock, LuReceiptText, LuUserRound, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
+import { useAppSelector } from '@/store/hooks'
 import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
 import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
+
+// How many already-decided (cancelled) orders to show below the live queue —
+// enough recent history to check a decision without pulling the property's
+// entire cancellation record every time this page loads.
+const HISTORY_LIMIT = 100
 
 type OrderItem = { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }
 type PendingOrder = {
@@ -15,6 +21,9 @@ type PendingOrder = {
   cancelReason: string | null
   cancelRequestedBy: string | null
   cancelRequestedAt: string | null
+  cancelDecidedBy: string | null
+  cancelDecidedAt: string | null
+  cancelDecisionNote: string | null
   table: { label: string } | null
   customer: { firstName: string; lastName: string | null } | null
   items: OrderItem[]
@@ -33,7 +42,16 @@ const ago = (iso: string | null) => {
 
 export default function Approvals() {
   const toast = useToast()
+  const user = useAppSelector((s) => s.auth.user)
+  // This queue is only useful to someone who can actually decide a
+  // cancellation — a plain waiter has no reason to browse other staff's
+  // requests. The list itself is already ownership-scoped server-side
+  // (canSeeAllOrders), so this is a UI courtesy, not the real access
+  // control — but it stops a Sales-section role from stumbling onto approve/
+  // reject buttons that would just 403.
+  const canApprove = Boolean(user?.role?.permissions.includes('POS_APPROVE_CANCELLATION'))
   const [orders, setOrders] = useState<PendingOrder[]>([])
+  const [decided, setDecided] = useState<PendingOrder[]>([])
   const [staff, setStaff] = useState<Record<string, string>>({})
   const [profile, setProfile] = useState<ReceiptProfile>(null)
   const [receiptId, setReceiptId] = useState<string | null>(null)
@@ -45,8 +63,12 @@ export default function Approvals() {
     setLoading(true)
     setError('')
     try {
-      const r = await api<{ orders: PendingOrder[] }>('/pos/orders?channel=FOOD&status=PENDING_CANCELLATION')
-      setOrders(r.orders)
+      const [pending, history] = await Promise.all([
+        api<{ orders: PendingOrder[] }>('/pos/orders?channel=FOOD&status=PENDING_CANCELLATION'),
+        api<{ orders: PendingOrder[] }>(`/pos/orders?channel=FOOD&status=CANCELLED&limit=${HISTORY_LIMIT}`),
+      ])
+      setOrders(pending.orders)
+      setDecided(history.orders)
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not load approvals'
       setError(message)
@@ -56,7 +78,7 @@ export default function Approvals() {
     }
   }, [toast])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { if (canApprove) void load(); else setLoading(false) }, [load, canApprove])
   useEffect(() => {
     api<{ employees: Employee[] }>('/employees').then((r) => {
       setStaff(Object.fromEntries(r.employees.map((e) => [e.id, `${e.firstName} ${e.lastName ?? ''}`.trim()])))
@@ -86,6 +108,24 @@ export default function Approvals() {
   }
 
   const heading = useMemo(() => `${orders.length} awaiting decision`, [orders.length])
+
+  if (!canApprove) {
+    return (
+      <div className="mx-auto max-w-5xl px-6 py-8 sm:px-8 lg:px-10">
+        <header className="flex items-start gap-3">
+          <span className="flex size-11 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuBadgeCheck className="size-5" /></span>
+          <div>
+            <h1 className="font-display text-3xl font-semibold">Approvals</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Cancellation requests from the floor.</p>
+          </div>
+        </header>
+        <div className="mt-7 flex min-h-40 flex-col items-center justify-center gap-2 rounded-sm border border-dashed p-12 text-center text-sm text-muted-foreground">
+          <LuLock className="size-5" />
+          You don't have permission to approve cancellations. Ask a manager to grant "Approve order cancellations" on your role.
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 sm:px-8 lg:px-10">
@@ -157,6 +197,33 @@ export default function Approvals() {
                 >
                   <LuReceiptText className="size-4" /> View receipt
                 </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-10 text-xs font-semibold uppercase tracking-widest text-muted-foreground">Recently decided · last {decided.length}</p>
+      {!loading && decided.length === 0 ? (
+        <div className="mt-4 rounded-sm border border-dashed p-8 text-center text-sm text-muted-foreground">No cancellations decided yet.</div>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {decided.map((order) => (
+            <article key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-sm border bg-card p-3.5 shadow-sm">
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  #{order.orderNumber}
+                  <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive">Cancelled</span>
+                </p>
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {order.cancelReason || 'No reason given'}
+                  {order.cancelDecidedBy && staff[order.cancelDecidedBy] ? ` · decided by ${staff[order.cancelDecidedBy]}` : ''}
+                  {order.cancelDecidedAt ? ` · ${ago(order.cancelDecidedAt)}` : ''}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-3">
+                <p className="text-sm font-bold">{money(order.total)}</p>
+                <button onClick={() => setReceiptId(order.id)} title="View receipt" className="rounded-sm p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><LuReceiptText className="size-4" /></button>
               </div>
             </article>
           ))}

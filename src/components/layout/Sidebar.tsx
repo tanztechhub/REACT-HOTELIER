@@ -30,7 +30,11 @@ export default function Sidebar({ className, mobile = false, onNavigate }: Sideb
   const logoUrl = useAppSelector((s) => s.tenant.logoUrl)
   const shortName = useAppSelector((s) => s.tenant.shortName)
   const allowedSections = useAppSelector((s) => s.auth.user?.role?.allowedSections) ?? DEFAULT_SECTIONS
-  const visibleNavigation = navigation.filter((group) => allowedSections.includes(group.section))
+  const permissions = useAppSelector((s) => s.auth.user?.role?.permissions) ?? []
+  const visibleNavigation = navigation
+    .filter((group) => allowedSections.includes(group.section))
+    .map((group) => ({ ...group, items: group.items.filter((item) => !item.permission || permissions.includes(item.permission)) }))
+    .filter((group) => group.items.length > 0)
 
   function handleLogout() {
     void dispatch(logout())

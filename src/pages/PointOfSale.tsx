@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  LuBan, LuBedDouble, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
+  LuBan, LuBedDouble, LuBellRing, LuBuilding2, LuCheck, LuChevronDown, LuCircleAlert, LuCircleCheck, LuClipboardList, LuCoffee, LuLoaderCircle, LuMapPin, LuMinus,
   LuPause, LuPencil, LuPlus, LuPrinter, LuReceiptText, LuSearch, LuSlidersHorizontal, LuTrash2, LuUserRound, LuX,
 } from 'react-icons/lu'
 import { api } from '@/lib/api'
@@ -65,10 +65,15 @@ type MenuItem = {
 // the same item can sit on the cart twice with different options.
 type CartLine = { key: string; item: MenuItem; variant: Variant | null; addons: Addon[]; quantity: number }
 type CreatedOrder = { id: string; orderNumber: number }
-type ReadyNotification = { type: 'ORDER_READY'; message: string; order: { id: string; orderNumber: number; table: { label: string } | null } }
 type HeldSale = { key: string; heldNo: number; label: string; tableId: string; discount: string; notes: string; party: SaleParty; cart: CartLine[] }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
-type ActiveOrder = { id: string; orderNumber: number; status: string; total: number; customer: { firstName: string; lastName: string | null } | null; table: { label: string } | null }
+type ActiveOrder = {
+  id: string; orderNumber: number; status: string; total: number
+  createdBy: string | null
+  customer: { firstName: string; lastName: string | null } | null
+  table: { label: string } | null
+  items: { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }[]
+}
 type CompletedOrder = ActiveOrder & { paid: number; paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID'; updatedAt: string }
 type CancelledOrder = ActiveOrder & {
   statusBeforeCancel: string | null
@@ -76,10 +81,12 @@ type CancelledOrder = ActiveOrder & {
   cancelRequestedAt: string | null
   cancelDecidedAt: string | null
   cancelDecisionNote: string | null
-  items: { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }[]
 }
 
 const NON_FINAL_STATUSES = ['OPEN', 'PREPARING', 'READY', 'SERVED']
+// Same cap used app-wide for "recent sales" style lists (Receipts, Approvals
+// history) — see the note on Receipts.tsx's FETCH_LIMIT for the size math.
+const FETCH_LIMIT = 100
 
 const formatKes = (price: number) => `KSh ${price.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const toNumber = (value: string | number) => (typeof value === 'number' ? value : Number(value))
@@ -203,7 +210,10 @@ export default function PointOfSale() {
   const sentTimer = useRef<number | undefined>(undefined)
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<CreatedOrder | null>(null)
-  const [readyOrders, setReadyOrders] = useState<ReadyNotification[]>([])
+  // First/last name per employee id — resolves an order's createdBy to a
+  // "rung up by" name on the ready-to-serve cards, same convention the
+  // Approvals page already uses for cancelRequestedBy/cancelDecidedBy.
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({})
 
   const [activeOrders, setActiveOrders] = useState<ActiveOrder[]>([])
   const [activeOrdersLoading, setActiveOrdersLoading] = useState(false)
@@ -215,6 +225,7 @@ export default function PointOfSale() {
   const [settlementOrderId, setSettlementOrderId] = useState<string | null>(null)
   const [addItemsOrder, setAddItemsOrder] = useState<ActiveOrder | null>(null)
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null)
+  const [servingId, setServingId] = useState<string | null>(null)
 
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId, needsChoice: needsLocationChoice } = useWorkingLocation(locations)
 
@@ -257,8 +268,8 @@ export default function PointOfSale() {
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
       const [cancelled, pending] = await Promise.all([
-        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=CANCELLED${query}`),
-        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=PENDING_CANCELLATION${query}`),
+        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=CANCELLED&limit=${FETCH_LIMIT}${query}`),
+        api<{ orders: CancelledOrder[] }>(`/pos/orders?channel=FOOD&status=PENDING_CANCELLATION&limit=${FETCH_LIMIT}${query}`),
       ])
       setCancelledOrders([...(pending.orders ?? []), ...(cancelled.orders ?? [])])
     } catch (cause) {
@@ -272,7 +283,7 @@ export default function PointOfSale() {
     setCompletedLoading(true)
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
-      const response = await api<{ orders: CompletedOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED&limit=100${query}`)
+      const response = await api<{ orders: CompletedOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED&limit=${FETCH_LIMIT}${query}`)
       setCompletedOrders(response.orders ?? [])
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load completed orders')
@@ -312,13 +323,18 @@ export default function PointOfSale() {
   useEffect(() => { if (!loading) { void loadMenuItems(); void loadTables(); void loadActiveOrders() } }, [effectiveLocationId])
   useEffect(() => { if (tab === 'CANCELLED') void loadCancelledOrders() }, [tab, effectiveLocationId])
   useEffect(() => { if (tab === 'COMPLETED') void loadCompletedOrders() }, [tab, effectiveLocationId])
+  // Keeps activeOrders (and with it, the ready-to-serve priority section and
+  // its tab badge) current while staff sit on the New Sale tab ringing up
+  // other orders — a counter/kitchen order going READY elsewhere shouldn't
+  // need a manual refresh to notice.
   useEffect(() => {
-    async function loadReady() {
-      try { const response = await api<{ notifications: ReadyNotification[] }>('/pos/orders/ready'); setReadyOrders(response.notifications) } catch { /* Main POS error handling remains with menu and checkout actions. */ }
-    }
-    void loadReady()
-    const timer = window.setInterval(() => void loadReady(), 15000)
+    const timer = window.setInterval(() => void loadActiveOrders(), 15000)
     return () => window.clearInterval(timer)
+  }, [effectiveLocationId])
+  useEffect(() => {
+    api<{ employees: { id: string; firstName: string; lastName: string | null }[] }>('/employees')
+      .then((r) => setStaffNames(Object.fromEntries(r.employees.map((e) => [e.id, `${e.firstName} ${e.lastName ?? ''}`.trim()]))))
+      .catch(() => { /* Waiter name is a nicety on the ready cards, not load-critical. */ })
   }, [])
   useEffect(() => {
     if (!categoryOpen) return
@@ -333,6 +349,12 @@ export default function PointOfSale() {
   const financials = useMemo(() => computeFinancials(cart, discount), [cart, discount])
   const itemCount = cart.reduce((sum, line) => sum + line.quantity, 0)
   const serveMode = locations.find((l) => l.id === effectiveLocationId)?.serveMode ?? 'KITCHEN'
+  // Orders waiting to be handed over — Kitchen tickets picked up at the pass,
+  // or counter orders awaiting the approval-gated serve — get priority
+  // placement in Active Orders ahead of everything still in progress.
+  const readyActiveOrders = activeOrders.filter((o) => o.status === 'READY')
+  const otherActiveOrders = activeOrders.filter((o) => o.status !== 'READY')
+  const readyCount = readyActiveOrders.length
   const instantServe = serveMode === 'DIRECT'
   const sendsToCounter = serveMode === 'COUNTER'
 
@@ -451,12 +473,16 @@ export default function PointOfSale() {
     }
   }
 
-  async function markServed(notification: ReadyNotification) {
+  async function serveOrder(orderId: string) {
+    setServingId(orderId)
     try {
-      await api(`/pos/orders/${notification.order.id}/serve`, { method: 'PATCH' })
-      setReadyOrders((current) => current.filter((item) => item.order.id !== notification.order.id))
+      await api(`/pos/orders/${orderId}/serve`, { method: 'PATCH' })
       void loadActiveOrders()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not mark the order served') }
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not mark the order served')
+    } finally {
+      setServingId(null)
+    }
   }
 
   return (
@@ -492,23 +518,18 @@ export default function PointOfSale() {
 
       {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
       {confirmation && <div className="mt-5 flex items-center gap-2 rounded-sm border border-accent/30 bg-accent/10 p-3 text-sm font-medium text-accent"><LuCircleCheck />{instantServe ? `Order #${confirmation.orderNumber} was served.` : sendsToCounter ? `Order #${confirmation.orderNumber} was sent to the counter.` : `Order #${confirmation.orderNumber} was saved and sent to the kitchen.`}</div>}
-      {readyOrders.length > 0 && (
-        <div className="mt-5 space-y-2">
-          {readyOrders.map((notification) => (
-            <div key={notification.order.id} className="flex items-center justify-between gap-3 rounded-sm border border-accent/30 bg-accent/10 p-3 text-sm text-accent">
-              <span className="flex items-center gap-2 font-semibold"><LuCircleCheck />{notification.message} · {notification.order.table?.label || 'Takeaway'}</span>
-              <button onClick={() => void markServed(notification)} className="rounded-sm bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground">Mark served</button>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="mt-4 flex w-fit flex-wrap gap-2.5 sm:mt-6">
         {([
-          ['NEW', 'New Sale', <LuPlus key="i" className="size-4" />],
-          ['ACTIVE', `Active Orders${activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}`, <LuClipboardList key="i" className="size-4" />],
-          ['COMPLETED', 'Completed', <LuCircleCheck key="i" className="size-4" />],
-          ['CANCELLED', 'Cancelled', <LuBan key="i" className="size-4" />],
+          ['NEW', <>New Sale</>, <LuPlus key="i" className="size-4" />],
+          ['ACTIVE', (
+            <>
+              Active Orders{activeOrders.length > 0 ? ` (${activeOrders.length})` : ''}
+              {readyCount > 0 && <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-bold text-destructive-foreground">{readyCount} to serve</span>}
+            </>
+          ), <LuClipboardList key="i" className="size-4" />],
+          ['COMPLETED', <>Completed</>, <LuCircleCheck key="i" className="size-4" />],
+          ['CANCELLED', <>Cancelled</>, <LuBan key="i" className="size-4" />],
         ] as const).map(([value, label, icon]) => (
           <button
             key={value}
@@ -629,24 +650,64 @@ export default function PointOfSale() {
           ) : activeOrders.length === 0 ? (
             <div className="rounded-sm border border-dashed p-10 text-center text-sm text-muted-foreground">No orders in progress right now.</div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {activeOrders.map((order) => (
-                <article key={order.id} className="rounded-sm border bg-card p-5 shadow-sm">
-                  <div className="flex items-start justify-between">
-                    <h3 className="font-semibold">Order #{order.orderNumber}</h3>
-                    <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">{order.status}</span>
+            <>
+              {readyActiveOrders.length > 0 && (
+                <div className="mb-5 rounded-lg border-2 border-destructive/40 bg-destructive/5 p-2.5">
+                  <p className="mb-2 flex items-center gap-1.5 px-0.5 text-[11px] font-bold uppercase tracking-wider text-destructive">
+                    <LuBellRing className="size-3.5" /> Awaiting service · {readyActiveOrders.length}
+                  </p>
+                  <div className="space-y-2">
+                    {readyActiveOrders.map((order) => {
+                      const count = order.items.reduce((s, i) => s + i.quantity, 0)
+                      const waiter = order.createdBy ? staffNames[order.createdBy] : undefined
+                      return (
+                        <div key={order.id} className="flex flex-wrap items-center gap-2 rounded-sm border bg-card p-2.5 shadow-sm sm:flex-nowrap">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold text-foreground">#{order.orderNumber} · {order.customer ? `${order.customer.firstName} ${order.customer.lastName ?? ''}` : 'Walk-in'}</p>
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {count} item{count === 1 ? '' : 's'} · {order.table?.label ?? 'Takeaway'}{waiter ? ` · rung up by ${waiter}` : ''}
+                            </p>
+                          </div>
+                          <button type="button" onClick={() => setReceiptOrderId(order.id)} title="Preview receipt" className="shrink-0 rounded-sm p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"><LuPrinter className="size-4" /></button>
+                          <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">Pending</span>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{formatKes(order.total)}</span>
+                          <button
+                            type="button"
+                            disabled={servingId === order.id}
+                            onClick={() => void serveOrder(order.id)}
+                            className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground disabled:opacity-50"
+                          >
+                            {servingId === order.id ? <LuLoaderCircle className="size-3.5 animate-spin" /> : 'Serve Now'}
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
-                  <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><LuUserRound className="size-3.5" /> {order.customer ? `${order.customer.firstName} ${order.customer.lastName ?? ''}` : 'Walk-in'}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{order.table?.label ?? 'Takeaway'}</p>
-                  <p className="mt-3 text-lg font-bold">{formatKes(order.total)}</p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button onClick={() => setReceiptOrderId(order.id)} title="Receipt" className="inline-flex items-center justify-center rounded-sm border p-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"><LuPrinter className="size-3.5" /></button>
-                    <button onClick={() => setAddItemsOrder(order)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Manage</button>
-                    <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuReceiptText className="size-3.5" /> Complete & Pay</button>
-                  </div>
-                </article>
-              ))}
-            </div>
+                </div>
+              )}
+              {otherActiveOrders.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {otherActiveOrders.map((order) => (
+                    <article key={order.id} className="rounded-sm border bg-card p-5 shadow-sm">
+                      <div className="flex items-start justify-between">
+                        <h3 className="font-semibold">Order #{order.orderNumber}</h3>
+                        <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">{order.status}</span>
+                      </div>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><LuUserRound className="size-3.5" /> {order.customer ? `${order.customer.firstName} ${order.customer.lastName ?? ''}` : 'Walk-in'}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{order.table?.label ?? 'Takeaway'}</p>
+                      <p className="mt-3 text-lg font-bold">{formatKes(order.total)}</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button onClick={() => setReceiptOrderId(order.id)} title="Receipt" className="inline-flex items-center justify-center rounded-sm border p-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"><LuPrinter className="size-3.5" /></button>
+                        <button onClick={() => setAddItemsOrder(order)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuPencil className="size-3.5" /> Manage</button>
+                        {order.status === 'SERVED' && (
+                          <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"><LuReceiptText className="size-3.5" /> Complete & Pay</button>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </section>
       ) : (

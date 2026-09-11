@@ -71,6 +71,11 @@ export interface NavItem {
   href: string
   icon: IconType
   moduleKey?: string
+  // Beyond the section-level allowedSections gate, this item also needs a
+  // specific Role.permissions capability — e.g. Approvals is only useful to
+  // someone who can actually decide a cancellation, not every Sales-section
+  // role (a waiter has SALES access for POS itself).
+  permission?: string
 }
 
 export interface NavGroup {
@@ -116,7 +121,7 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Point of Sale', href: '/pos', icon: LuShoppingCart, moduleKey: 'POS' },
       { label: 'Products POS', href: '/sales/products-pos', icon: LuPackage },
-      { label: 'Approvals', href: '/sales/approvals', icon: LuBadgeCheck },
+      { label: 'Approvals', href: '/sales/approvals', icon: LuBadgeCheck, permission: 'POS_APPROVE_CANCELLATION' },
       { label: 'Receipts', href: '/sales/receipts', icon: LuReceiptText },
       { label: 'Tables', href: '/sales/tables', icon: LuTable2 },
       { label: 'Customers', href: '/sales/customers', icon: LuUsers },

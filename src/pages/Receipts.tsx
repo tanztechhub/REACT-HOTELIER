@@ -13,9 +13,18 @@ type ReceiptRow = ReceiptOrder & { total: number; paid: number; paymentStatus?: 
 type LocationOption = { id: string; name: string }
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 
+// Applied to each status fetched (COMPLETED, CANCELLED) — kept in step with
+// the same cap used for the POS Completed/Cancelled tabs and the Approvals
+// history view, so every "recent sales" list in the app behaves the same
+// way. ~100 full order payloads (items/payments/tax breakdown included) run
+// well under 1MB even on a slow connection; 500 would push multiple MB on
+// every page load for no real benefit — nobody scrolls that far back.
+const FETCH_LIMIT = 100
+
 const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
 
 const badgeFor = (row: ReceiptRow) => {
+  if (row.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-destructive/10 text-destructive' }
   const owed = Math.max(0, row.total - row.paid)
   if (row.paymentStatus === 'PAID' || owed <= 0.01) return { label: 'Paid', cls: 'bg-success/10 text-success' }
   if (row.paymentStatus === 'PARTIAL' || row.paid > 0.01) return { label: 'Part-paid', cls: 'bg-warning/15 text-warning' }
@@ -42,13 +51,17 @@ export default function Receipts() {
     setError('')
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
-      const [orderResponse, profileResponse, locationResponse, methodsResponse] = await Promise.all([
-        api<{ orders: ReceiptRow[] }>(`/pos/orders?status=COMPLETED${query}`),
+      const [completedResponse, cancelledResponse, profileResponse, locationResponse, methodsResponse] = await Promise.all([
+        api<{ orders: ReceiptRow[] }>(`/pos/orders?status=COMPLETED&limit=${FETCH_LIMIT}${query}`),
+        api<{ orders: ReceiptRow[] }>(`/pos/orders?status=CANCELLED&limit=${FETCH_LIMIT}${query}`),
         api<{ profile: ReceiptProfile }>('/business-profile'),
         api<{ locations: LocationOption[] }>('/locations'),
         api<{ methods: (PaymentMethod & { code: string })[] }>('/payment-methods?activeOnly=true'),
       ])
-      setOrders(orderResponse.orders)
+      const merged = [...completedResponse.orders, ...cancelledResponse.orders].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      )
+      setOrders(merged)
       setProfile(profileResponse.profile)
       setLocations(locationResponse.locations)
       setPaymentMethods(methodsResponse.methods.filter((m) => m.code !== 'ROOM_CHARGE'))
@@ -63,9 +76,10 @@ export default function Receipts() {
 
   useEffect(() => { void load() }, [load])
 
-  const owingCount = orders.filter((o) => Math.max(0, o.total - o.paid) > 0.01).length
+  const owingCount = orders.filter((o) => o.status !== 'CANCELLED' && Math.max(0, o.total - o.paid) > 0.01).length
 
   const visible = orders.filter((order) => {
+    if (payFilter !== 'ALL' && order.status === 'CANCELLED') return false
     const owed = Math.max(0, order.total - order.paid) > 0.01
     if (payFilter === 'OWING' && !owed) return false
     if (payFilter === 'PAID' && owed) return false
@@ -79,7 +93,7 @@ export default function Receipts() {
       <header>
         <p className="text-sm font-semibold text-secondary">Sales</p>
         <h1 className="mt-1 font-display text-3xl font-semibold">Receipts</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Every completed sale, with the full itemized breakdown and payment record.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Every completed sale — plus cancelled orders, kept here for the record — with the full itemized breakdown and payment history.</p>
       </header>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -116,7 +130,7 @@ export default function Receipts() {
       {loading ? (
         <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading receipts…</div>
       ) : visible.length === 0 ? (
-        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No completed sales {search.trim() || payFilter !== 'ALL' ? 'match this view' : 'yet'}.</div>
+        <div className="mt-7 min-h-64 rounded-sm border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No sales {search.trim() || payFilter !== 'ALL' ? 'match this view' : 'yet'}.</div>
       ) : (
         <section className="mt-7 overflow-hidden rounded-sm border bg-card shadow-sm">
           <div className="overflow-x-auto">
@@ -125,8 +139,8 @@ export default function Receipts() {
                 <tr>
                   <th className="px-5 py-3">Order</th>
                   <th className="px-5 py-3">Table</th>
-                  <th className="px-5 py-3">Completed</th>
-                  <th className="px-5 py-3">Payment</th>
+                  <th className="px-5 py-3">Date</th>
+                  <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3 text-right">Paid</th>
                   <th className="px-5 py-3 text-right">Total</th>
                   <th className="px-5 py-3" />
@@ -145,11 +159,11 @@ export default function Receipts() {
                         <span className={cn('inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', badge.cls)}>{badge.label}</span>
                         <span className="ml-2 text-xs text-muted-foreground">{[...new Set(order.payments.map((p) => p.paymentMethod.name))].join(', ') || '—'}</span>
                       </td>
-                      <td className="px-5 py-4 text-right tabular-nums text-muted-foreground">{formatKes(order.paid)}{owed > 0.01 && <span className="block text-[11px] font-semibold text-warning">owing {formatKes(owed)}</span>}</td>
+                      <td className="px-5 py-4 text-right tabular-nums text-muted-foreground">{order.status === 'CANCELLED' ? '—' : <>{formatKes(order.paid)}{owed > 0.01 && <span className="block text-[11px] font-semibold text-warning">owing {formatKes(owed)}</span>}</>}</td>
                       <td className="px-5 py-4 text-right font-semibold">{formatKes(order.total)}</td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1">
-                          {owed > 0.01 && (
+                          {order.status !== 'CANCELLED' && owed > 0.01 && (
                             <button onClick={(e) => { e.stopPropagation(); setPayId(order.id) }} title="Take payment" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuWallet /></button>
                           )}
                           <button onClick={(e) => { e.stopPropagation(); setReceiptId(order.id) }} title="View receipt" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
