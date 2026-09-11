@@ -29,6 +29,16 @@ const tempLabel: Record<Temperature, string> = { OTHER: 'Not a drink', HOT: 'Hot
 
 type Category = { id: string; name: string; isActive: boolean }
 type Location = { id: string; name: string; type: string | null }
+type StockProduct = {
+  id: string
+  name: string
+  unit: string
+  packSize: string | null
+  packLabel: string | null
+  packUnit: { id: string; name: string } | null
+}
+type Recipe = { id: string; name: string }
+
 type MenuItem = {
   id: string
   name: string
@@ -49,6 +59,11 @@ type MenuItem = {
   isAvailable: boolean
   sortOrder: number
   locations: { id: string; name: string }[]
+  productId: string | null
+  recipeId: string | null
+  stockQtyPerUnit: string | null
+  product: StockProduct | null
+  recipe: Recipe | null
   _count: { orderItems: number; variants: number }
 }
 
@@ -58,8 +73,18 @@ type Variant = {
   name: string
   sku: string | null
   price: string
+  stockProductId: string | null
+  stockQtyPerUnit: string | null
+  stockProduct: StockProduct | null
   isActive: boolean
   sortOrder: number
+}
+
+// "750 ml bottle" / "500 ml can" — what one unit of a pack-tracked product
+// actually is, so picking a serving size means something.
+function packHint(p: StockProduct): string | undefined {
+  if (!p.packSize || !p.packUnit) return undefined
+  return `1 ${p.packLabel || 'pack'} = ${Number(p.packSize).toLocaleString()} ${p.packUnit.name}`
 }
 
 const TAX_CHOICES = [
@@ -94,6 +119,10 @@ function describeBizTax(biz: BizTax | null): string {
   return `${Number(biz.taxRate ?? 16)}% ${biz.taxMode === 'EXCLUSIVE' ? 'added on top' : 'included'}`
 }
 
+// How selling this item affects stock: nothing tracked, one direct product
+// (a whole-bottle beer), or a recipe (multi-ingredient / cocktails).
+type StockMode = 'none' | 'product' | 'recipe'
+
 type Form = {
   name: string
   shortName: string
@@ -110,10 +139,15 @@ type Form = {
   isActive: boolean
   isAvailable: boolean
   locationIds: string[]
+  stockMode: StockMode
+  stockProductId: string
+  stockQtyPerUnit: string
+  recipeId: string
 }
 const emptyForm: Form = {
   name: '', shortName: '', menuCategoryId: '', description: '', sku: '', price: '', taxChoice: 'INHERIT', taxRate: '',
   photoUrl: '', temperature: 'OTHER', isVegetarian: false, allowsAddons: false, isActive: true, isAvailable: true, locationIds: [],
+  stockMode: 'none', stockProductId: '', stockQtyPerUnit: '', recipeId: '',
 }
 
 const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
@@ -132,13 +166,15 @@ export default function MenuItems() {
   const [showForm, setShowForm] = useState(false)
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   // Variants staged in the create form — POSTed after the item is created.
-  const [newVariants, setNewVariants] = useState<{ name: string; price: string; sku: string }[]>([])
-  const [variantDraft, setVariantDraft] = useState({ name: '', price: '', sku: '' })
+  const [newVariants, setNewVariants] = useState<{ name: string; price: string; sku: string; stockProductId: string; stockQtyPerUnit: string }[]>([])
+  const [variantDraft, setVariantDraft] = useState({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
   const [saving, setSaving] = useState(false)
   const [busy, setBusy] = useState(false)
   const [variantsFor, setVariantsFor] = useState<MenuItem | null>(null)
   const [bizTax, setBizTax] = useState<BizTax | null>(null)
   const [locations, setLocations] = useState<Location[]>([])
+  const [stockProducts, setStockProducts] = useState<StockProduct[]>([])
+  const [recipes, setRecipes] = useState<Recipe[]>([])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -166,7 +202,16 @@ export default function MenuItems() {
     api<{ categories: Category[] }>('/menu-categories').then((r) => setCategories(r.categories)).catch(() => {})
     api<{ profile: BizTax | null }>('/business-profile').then((r) => setBizTax(r.profile)).catch(() => {})
     api<{ locations: Location[] }>('/locations').then((r) => setLocations(r.locations)).catch(() => {})
+    api<{ products: StockProduct[] }>('/products?active=true').then((r) => setStockProducts(r.products)).catch(() => {})
+    // Recipes need the Kitchen module — a property without it just gets no options here.
+    api<{ recipes: Recipe[] }>('/recipes').then((r) => setRecipes(r.recipes)).catch(() => {})
   }, [])
+
+  const stockProductOptions = useMemo(
+    () => stockProducts.map((p) => ({ value: p.id, label: p.name, hint: packHint(p) ?? p.unit })),
+    [stockProducts],
+  )
+  const recipeOptions = useMemo(() => recipes.map((r) => ({ value: r.id, label: r.name })), [recipes])
 
   const summary = useMemo(() => ({
     total: items.length,
@@ -178,13 +223,19 @@ export default function MenuItems() {
 
   function resetVariantStaging() {
     setNewVariants([])
-    setVariantDraft({ name: '', price: '', sku: '' })
+    setVariantDraft({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
   }
 
   function addStagedVariant() {
     if (!variantDraft.name.trim() || variantDraft.price === '') return
-    setNewVariants((v) => [...v, { name: variantDraft.name.trim(), price: variantDraft.price, sku: variantDraft.sku.trim() }])
-    setVariantDraft({ name: '', price: '', sku: '' })
+    setNewVariants((v) => [...v, {
+      name: variantDraft.name.trim(),
+      price: variantDraft.price,
+      sku: variantDraft.sku.trim(),
+      stockProductId: variantDraft.stockProductId,
+      stockQtyPerUnit: variantDraft.stockQtyPerUnit,
+    }])
+    setVariantDraft({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
   }
 
   function openCreate() {
@@ -215,6 +266,10 @@ export default function MenuItems() {
       isActive: item.isActive,
       isAvailable: item.isAvailable,
       locationIds: item.locations.map((l) => l.id),
+      stockMode: item.recipeId ? 'recipe' : item.productId ? 'product' : 'none',
+      stockProductId: item.productId ?? '',
+      stockQtyPerUnit: item.stockQtyPerUnit != null ? String(Number(item.stockQtyPerUnit)) : '',
+      recipeId: item.recipeId ?? '',
     })
     setShowForm(true)
   }
@@ -242,6 +297,9 @@ export default function MenuItems() {
         isActive: form.isActive,
         isAvailable: form.isAvailable,
         locationIds: form.locationIds,
+        productId: form.stockMode === 'product' ? form.stockProductId || null : null,
+        recipeId: form.stockMode === 'recipe' ? form.recipeId || null : null,
+        stockQtyPerUnit: form.stockMode === 'product' && form.stockQtyPerUnit !== '' ? Number(form.stockQtyPerUnit) : null,
       }
       if (editing) {
         await api(`/menu-items/${editing.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
@@ -249,7 +307,16 @@ export default function MenuItems() {
         const { item } = await api<{ item: { id: string } }>('/menu-items', { method: 'POST', body: JSON.stringify(payload) })
         if (newVariants.length > 0) {
           const results = await Promise.allSettled(newVariants.map((v) =>
-            api(`/menu-items/${item.id}/variants`, { method: 'POST', body: JSON.stringify({ name: v.name, price: Number(v.price), sku: v.sku || undefined }) }),
+            api(`/menu-items/${item.id}/variants`, {
+              method: 'POST',
+              body: JSON.stringify({
+                name: v.name,
+                price: Number(v.price),
+                sku: v.sku || undefined,
+                stockProductId: v.stockProductId || undefined,
+                stockQtyPerUnit: v.stockQtyPerUnit !== '' ? Number(v.stockQtyPerUnit) : undefined,
+              }),
+            }),
           ))
           const failed = results.filter((r) => r.status === 'rejected').length
           if (failed > 0) toast.error(`Item saved, but ${failed} variant${failed === 1 ? '' : 's'} could not be added — add them from the item's row.`)
@@ -549,6 +616,70 @@ export default function MenuItems() {
               </Field>
             </FieldGroup>
 
+            <FieldGroup title="Stock deduction">
+              <Field label="On sale, this item" className="sm:col-span-2">
+                <select
+                  className="input"
+                  value={form.stockMode}
+                  onChange={(e) => setForm({ ...form, stockMode: e.target.value as StockMode })}
+                >
+                  <option value="none">Doesn't track stock</option>
+                  <option value="product">Consumes a set amount of one product</option>
+                  <option value="recipe">Uses a recipe (multiple ingredients)</option>
+                </select>
+              </Field>
+              {form.stockMode === 'product' && (
+                <>
+                  <Field label="Product">
+                    <SearchableSelect
+                      options={stockProductOptions}
+                      value={form.stockProductId}
+                      onChange={(value) => setForm({ ...form, stockProductId: value })}
+                      placeholder="Select a product"
+                      searchPlaceholder="Search products…"
+                      emptyText="No products match."
+                    />
+                  </Field>
+                  <Field label="Consumes per sale">
+                    <input
+                      type="number" min="0" step="0.001" placeholder="e.g. 500"
+                      value={form.stockQtyPerUnit}
+                      onChange={(e) => setForm({ ...form, stockQtyPerUnit: e.target.value })}
+                      className="input"
+                    />
+                    {(() => {
+                      const p = stockProducts.find((x) => x.id === form.stockProductId)
+                      if (!p) return null
+                      const hint = packHint(p)
+                      return (
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          In {p.packUnit?.name ?? p.unit}{hint ? ` — ${hint}` : ''}
+                        </span>
+                      )
+                    })()}
+                  </Field>
+                </>
+              )}
+              {form.stockMode === 'recipe' && (
+                <Field label="Recipe" className="sm:col-span-2">
+                  <SearchableSelect
+                    options={recipeOptions}
+                    value={form.recipeId}
+                    onChange={(value) => setForm({ ...form, recipeId: value })}
+                    placeholder={recipeOptions.length ? 'Select a recipe' : 'No recipes yet — add one under Kitchen → Recipes'}
+                    searchPlaceholder="Search recipes…"
+                    emptyText="No recipes match."
+                    disabled={recipeOptions.length === 0}
+                  />
+                </Field>
+              )}
+              {!!editing?._count.variants && form.stockMode !== 'none' && (
+                <p className="text-xs text-muted-foreground sm:col-span-2">
+                  This item has variants — any variant with its own product set (in Variants) overrides this for that size.
+                </p>
+              )}
+            </FieldGroup>
+
             <FieldGroup title="Available at">
               <div className="sm:col-span-2">
                 {locations.length === 0 ? (
@@ -576,42 +707,71 @@ export default function MenuItems() {
 
                 {newVariants.length > 0 && (
                   <div className="mb-3 space-y-1.5">
-                    {newVariants.map((v, i) => (
-                      <div key={i} className="flex items-center justify-between gap-3 rounded-sm border bg-muted/40 px-3 py-2 text-sm">
-                        <span className="min-w-0 truncate font-medium">{v.name}</span>
-                        <span className="flex shrink-0 items-center gap-3">
-                          <span className="tabular-nums">{money(v.price || 0)}</span>
-                          {v.sku && <span className="text-xs text-muted-foreground">{v.sku}</span>}
-                          <button type="button" onClick={() => setNewVariants((cur) => cur.filter((_, x) => x !== i))} title="Remove" className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
-                        </span>
-                      </div>
-                    ))}
+                    {newVariants.map((v, i) => {
+                      const p = stockProducts.find((x) => x.id === v.stockProductId)
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-3 rounded-sm border bg-muted/40 px-3 py-2 text-sm">
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className="font-medium">{v.name}</span>
+                            {p && (
+                              <span className="ml-2 text-xs text-secondary">
+                                → {v.stockQtyPerUnit || 1} {p.packUnit?.name ?? p.unit} of {p.name}
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex shrink-0 items-center gap-3">
+                            <span className="tabular-nums">{money(v.price || 0)}</span>
+                            {v.sku && <span className="text-xs text-muted-foreground">{v.sku}</span>}
+                            <button type="button" onClick={() => setNewVariants((cur) => cur.filter((_, x) => x !== i))} title="Remove" className="text-muted-foreground hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 
-                <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
-                  <label className="text-xs font-medium">Name
-                    <input
-                      value={variantDraft.name}
-                      onChange={(e) => setVariantDraft({ ...variantDraft, name: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
-                      placeholder="Large"
-                      className="input mt-1"
-                    />
-                  </label>
-                  <label className="text-xs font-medium">Price
-                    <input
-                      type="number" min="0" step="0.01"
-                      value={variantDraft.price}
-                      onChange={(e) => setVariantDraft({ ...variantDraft, price: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
-                      className="input mt-1"
-                    />
-                  </label>
-                  <label className="text-xs font-medium">SKU
-                    <input value={variantDraft.sku} onChange={(e) => setVariantDraft({ ...variantDraft, sku: e.target.value })} placeholder="opt." className="input mt-1" />
-                  </label>
-                  <button type="button" onClick={addStagedVariant} disabled={!variantDraft.name.trim() || variantDraft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+                    <label className="text-xs font-medium">Name
+                      <input
+                        value={variantDraft.name}
+                        onChange={(e) => setVariantDraft({ ...variantDraft, name: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
+                        placeholder="Large"
+                        className="input mt-1"
+                      />
+                    </label>
+                    <label className="text-xs font-medium">Price
+                      <input
+                        type="number" min="0" step="0.01"
+                        value={variantDraft.price}
+                        onChange={(e) => setVariantDraft({ ...variantDraft, price: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStagedVariant() } }}
+                        className="input mt-1"
+                      />
+                    </label>
+                    <label className="text-xs font-medium">SKU
+                      <input value={variantDraft.sku} onChange={(e) => setVariantDraft({ ...variantDraft, sku: e.target.value })} placeholder="opt." className="input mt-1" />
+                    </label>
+                    <button type="button" onClick={addStagedVariant} disabled={!variantDraft.name.trim() || variantDraft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+                  </div>
+                  <div className="grid grid-cols-[1fr_8rem] items-end gap-2">
+                    <label className="text-xs font-medium">Stock (optional) — e.g. a 25ml Tot vs. a 750ml Bottle
+                      <span className="mt-1 block">
+                        <SearchableSelect
+                          options={stockProductOptions}
+                          value={variantDraft.stockProductId}
+                          onChange={(value) => setVariantDraft({ ...variantDraft, stockProductId: value })}
+                          placeholder="No product — doesn't deduct"
+                          searchPlaceholder="Search products…"
+                          emptyText="No products match."
+                        />
+                      </span>
+                    </label>
+                    <label className="text-xs font-medium">Consumes
+                      <input type="number" min="0" step="0.001" placeholder="e.g. 25" value={variantDraft.stockQtyPerUnit} onChange={(e) => setVariantDraft({ ...variantDraft, stockQtyPerUnit: e.target.value })} className="input mt-1" />
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
@@ -659,7 +819,12 @@ export default function MenuItems() {
       )}
 
       {variantsFor && (
-        <VariantsModal item={variantsFor} onClose={() => setVariantsFor(null)} onChanged={load} />
+        <VariantsModal
+          item={variantsFor}
+          stockProductOptions={stockProductOptions}
+          onClose={() => setVariantsFor(null)}
+          onChanged={load}
+        />
       )}
     </div>
   )
@@ -719,14 +884,21 @@ function NewMenuCategoryModal({ onClose, onCreated }: { onClose: () => void; onC
   )
 }
 
-function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: () => void; onChanged: () => Promise<void> }) {
+type VariantsModalProps = {
+  item: MenuItem
+  stockProductOptions: { value: string; label: string; hint?: string }[]
+  onClose: () => void
+  onChanged: () => Promise<void>
+}
+
+function VariantsModal({ item, stockProductOptions, onClose, onChanged }: VariantsModalProps) {
   const toast = useToast()
   const [variants, setVariants] = useState<Variant[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [draft, setDraft] = useState({ name: '', price: '', sku: '' })
+  const [draft, setDraft] = useState({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState({ name: '', price: '', sku: '' })
+  const [editDraft, setEditDraft] = useState({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -746,8 +918,17 @@ function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: 
     if (!draft.name.trim() || draft.price === '') return
     setBusy(true)
     try {
-      await api(`/menu-items/${item.id}/variants`, { method: 'POST', body: JSON.stringify({ name: draft.name.trim(), price: Number(draft.price), sku: draft.sku.trim() || undefined }) })
-      setDraft({ name: '', price: '', sku: '' })
+      await api(`/menu-items/${item.id}/variants`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: draft.name.trim(),
+          price: Number(draft.price),
+          sku: draft.sku.trim() || undefined,
+          stockProductId: draft.stockProductId || undefined,
+          stockQtyPerUnit: draft.stockQtyPerUnit !== '' ? Number(draft.stockQtyPerUnit) : undefined,
+        }),
+      })
+      setDraft({ name: '', price: '', sku: '', stockProductId: '', stockQtyPerUnit: '' })
       await load()
       await onChanged()
     } catch (cause) {
@@ -761,7 +942,16 @@ function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: 
     if (!editDraft.name.trim() || editDraft.price === '') return
     setBusy(true)
     try {
-      await api(`/menu-items/${item.id}/variants/${id}`, { method: 'PATCH', body: JSON.stringify({ name: editDraft.name.trim(), price: Number(editDraft.price), sku: editDraft.sku.trim() || undefined }) })
+      await api(`/menu-items/${item.id}/variants/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editDraft.name.trim(),
+          price: Number(editDraft.price),
+          sku: editDraft.sku.trim() || undefined,
+          stockProductId: editDraft.stockProductId || null,
+          stockQtyPerUnit: editDraft.stockQtyPerUnit !== '' ? Number(editDraft.stockQtyPerUnit) : null,
+        }),
+      })
       setEditingId(null)
       await load()
     } catch (cause) {
@@ -825,11 +1015,31 @@ function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: 
           <button onClick={onClose} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><LuX className="size-4" /></button>
         </div>
 
-        <form onSubmit={add} className="mt-5 grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
-          <label className="text-xs font-medium">Name<input required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Large" className="input mt-1" /></label>
-          <label className="text-xs font-medium">Price<input required type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} className="input mt-1" /></label>
-          <label className="text-xs font-medium">SKU<input value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value })} placeholder="opt." className="input mt-1" /></label>
-          <button disabled={busy || !draft.name.trim() || draft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+        <form onSubmit={add} className="mt-5 space-y-2">
+          <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+            <label className="text-xs font-medium">Name<input required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Large" className="input mt-1" /></label>
+            <label className="text-xs font-medium">Price<input required type="number" min="0" step="0.01" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value })} className="input mt-1" /></label>
+            <label className="text-xs font-medium">SKU<input value={draft.sku} onChange={(e) => setDraft({ ...draft, sku: e.target.value })} placeholder="opt." className="input mt-1" /></label>
+            <button disabled={busy || !draft.name.trim() || draft.price === ''} className="rounded-sm bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60">Add</button>
+          </div>
+          <div className="grid grid-cols-[1fr_8rem] items-end gap-2">
+            <label className="text-xs font-medium">
+              Stock (optional) — e.g. a 25ml Tot vs. a 750ml Bottle
+              <span className="mt-1 block">
+                <SearchableSelect
+                  options={stockProductOptions}
+                  value={draft.stockProductId}
+                  onChange={(value) => setDraft({ ...draft, stockProductId: value })}
+                  placeholder="No product — doesn't deduct"
+                  searchPlaceholder="Search products…"
+                  emptyText="No products match."
+                />
+              </span>
+            </label>
+            <label className="text-xs font-medium">Consumes
+              <input type="number" min="0" step="0.001" placeholder="e.g. 25" value={draft.stockQtyPerUnit} onChange={(e) => setDraft({ ...draft, stockQtyPerUnit: e.target.value })} className="input mt-1" />
+            </label>
+          </div>
         </form>
 
         <div className="mt-5 space-y-2">
@@ -840,13 +1050,32 @@ function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: 
           ) : variants.map((v, index) => (
             <div key={v.id} className={cn('rounded-sm border p-3', !v.isActive && 'opacity-60')}>
               {editingId === v.id ? (
-                <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
-                  <label className="text-xs font-medium">Name<input value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} className="input mt-1" /></label>
-                  <label className="text-xs font-medium">Price<input type="number" min="0" step="0.01" value={editDraft.price} onChange={(e) => setEditDraft({ ...editDraft, price: e.target.value })} className="input mt-1" /></label>
-                  <label className="text-xs font-medium">SKU<input value={editDraft.sku} onChange={(e) => setEditDraft({ ...editDraft, sku: e.target.value })} className="input mt-1" /></label>
-                  <div className="flex gap-1">
-                    <button onClick={() => void saveEdit(v.id)} disabled={busy} className="rounded-sm bg-primary px-2.5 py-2 text-xs font-semibold text-primary-foreground">Save</button>
-                    <button onClick={() => setEditingId(null)} className="rounded-sm border px-2.5 py-2 text-xs font-semibold hover:bg-muted">Cancel</button>
+                <div className="space-y-2">
+                  <div className="grid grid-cols-[1fr_6rem_6rem_auto] items-end gap-2">
+                    <label className="text-xs font-medium">Name<input value={editDraft.name} onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })} className="input mt-1" /></label>
+                    <label className="text-xs font-medium">Price<input type="number" min="0" step="0.01" value={editDraft.price} onChange={(e) => setEditDraft({ ...editDraft, price: e.target.value })} className="input mt-1" /></label>
+                    <label className="text-xs font-medium">SKU<input value={editDraft.sku} onChange={(e) => setEditDraft({ ...editDraft, sku: e.target.value })} className="input mt-1" /></label>
+                    <div className="flex gap-1">
+                      <button onClick={() => void saveEdit(v.id)} disabled={busy} className="rounded-sm bg-primary px-2.5 py-2 text-xs font-semibold text-primary-foreground">Save</button>
+                      <button onClick={() => setEditingId(null)} className="rounded-sm border px-2.5 py-2 text-xs font-semibold hover:bg-muted">Cancel</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-[1fr_8rem] items-end gap-2">
+                    <label className="text-xs font-medium">Stock (optional)
+                      <span className="mt-1 block">
+                        <SearchableSelect
+                          options={stockProductOptions}
+                          value={editDraft.stockProductId}
+                          onChange={(value) => setEditDraft({ ...editDraft, stockProductId: value })}
+                          placeholder="No product — doesn't deduct"
+                          searchPlaceholder="Search products…"
+                          emptyText="No products match."
+                        />
+                      </span>
+                    </label>
+                    <label className="text-xs font-medium">Consumes
+                      <input type="number" min="0" step="0.001" value={editDraft.stockQtyPerUnit} onChange={(e) => setEditDraft({ ...editDraft, stockQtyPerUnit: e.target.value })} className="input mt-1" />
+                    </label>
                   </div>
                 </div>
               ) : (
@@ -858,10 +1087,27 @@ function VariantsModal({ item, onClose, onChanged }: { item: MenuItem; onClose: 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{v.name}</p>
                     {v.sku && <p className="text-xs text-muted-foreground">SKU {v.sku}</p>}
+                    {v.stockProductId && v.stockProduct && (
+                      <p className="truncate text-xs text-secondary">
+                        → {v.stockQtyPerUnit != null ? Number(v.stockQtyPerUnit).toLocaleString() : 1} {v.stockProduct.packUnit?.name ?? v.stockProduct.unit} of {v.stockProduct.name}
+                      </p>
+                    )}
                   </div>
                   <span className="tabular-nums text-sm font-medium">{money(v.price)}</span>
                   <button onClick={() => void patchVariant(v, { isActive: !v.isActive })} disabled={busy} title={v.isActive ? 'Deactivate' : 'Activate'} className={cn('rounded-md p-1.5 hover:bg-muted', v.isActive ? 'text-muted-foreground' : 'text-success')}><LuPower className="size-3.5" /></button>
-                  <button onClick={() => { setEditingId(v.id); setEditDraft({ name: v.name, price: String(Number(v.price)), sku: v.sku ?? '' }) }} className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil className="size-3.5" /></button>
+                  <button
+                    onClick={() => {
+                      setEditingId(v.id)
+                      setEditDraft({
+                        name: v.name,
+                        price: String(Number(v.price)),
+                        sku: v.sku ?? '',
+                        stockProductId: v.stockProductId ?? '',
+                        stockQtyPerUnit: v.stockQtyPerUnit != null ? String(Number(v.stockQtyPerUnit)) : '',
+                      })
+                    }}
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"
+                  ><LuPencil className="size-3.5" /></button>
                   <button onClick={() => void removeVariant(v)} className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 className="size-3.5" /></button>
                 </div>
               )}
