@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuPencil, LuPlus, LuReceiptText, LuShoppingBag, LuTable2, LuTrash2, LuX } from 'react-icons/lu'
+import { LuCircleAlert, LuLoaderCircle, LuPencil, LuPlus, LuReceiptText, LuTable2, LuTrash2, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import Button from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
@@ -23,7 +23,6 @@ type LocationOption = { id: string; name: string }
 // A table can carry several separate, independently-billed orders at once —
 // activeOrders lists every one still in flight, not just the latest.
 type RestaurantTable = { id: string; label: string; area: string | null; capacity: number; status: TableStatus; isActive: boolean; locationId: string | null; location: LocationOption | null; activeOrders: ActiveOrderSummary[] }
-type TakeawaySummary = { id: string; orderNumber: number; status: string; createdAt: string; total: number }
 
 type TableForm = { label: string; area: string; capacity: string; locationId: string; isActive: boolean }
 const emptyForm: TableForm = { label: '', area: '', capacity: '2', locationId: '', isActive: true }
@@ -37,17 +36,14 @@ const STATUS_STYLES: Record<TableStatus, string> = {
   OUT_OF_SERVICE: 'bg-muted text-muted-foreground',
 }
 
-const NON_FINAL_STATUSES = ['OPEN', 'PREPARING', 'READY', 'SERVED']
-
 // orderId is null while showing the "pick which order" list for a table
 // with more than one active order.
-type PanelTarget = { kind: 'table'; table: RestaurantTable; orderId: string | null } | { kind: 'takeaway'; summary: TakeawaySummary }
+type PanelTarget = { table: RestaurantTable; orderId: string | null }
 
 export default function Tables() {
   const toast = useToast()
   const [tables, setTables] = useState<RestaurantTable[]>([])
   const [locations, setLocations] = useState<LocationOption[]>([])
-  const [takeaways, setTakeaways] = useState<TakeawaySummary[]>([])
   const [profile, setProfile] = useState<ReceiptProfile>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,15 +67,13 @@ export default function Tables() {
     setError('')
     try {
       const locationQuery = effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''
-      const [tableResponse, orderResponse, profileResponse, methodsResponse, locationResponse] = await Promise.all([
+      const [tableResponse, profileResponse, methodsResponse, locationResponse] = await Promise.all([
         api<{ tables: RestaurantTable[] }>(`/tables${locationQuery}`),
-        api<{ orders: (TakeawaySummary & { table: { label: string } | null })[] }>(`/pos/orders?channel=FOOD${effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''}`),
         api<{ profile: ReceiptProfile }>('/business-profile'),
         api<{ methods: (PaymentMethod & { code: string })[] }>('/payment-methods?activeOnly=true'),
         api<{ locations: LocationOption[] }>('/locations'),
       ])
       setTables(tableResponse.tables)
-      setTakeaways(orderResponse.orders.filter((o) => !o.table && NON_FINAL_STATUSES.includes(o.status)))
       setProfile(profileResponse.profile)
       // Room Charge is a system method the backend resolves by code when
       // settling to a folio — it isn't a real "how did they pay" choice.
@@ -143,19 +137,15 @@ export default function Tables() {
     // Exactly one active order: skip straight to its detail. More than one:
     // show a picker first. None: the "table is free" message.
     const soleOrderId = table.activeOrders.length === 1 ? table.activeOrders[0].id : null
-    setPanel({ kind: 'table', table, orderId: soleOrderId })
+    setPanel({ table, orderId: soleOrderId })
   }
 
   function selectOrderInPanel(orderId: string) {
-    setPanel((current) => (current?.kind === 'table' ? { ...current, orderId } : current))
+    setPanel((current) => (current ? { ...current, orderId } : current))
   }
 
   function backToOrderList() {
-    setPanel((current) => (current?.kind === 'table' ? { ...current, orderId: null } : current))
-  }
-
-  function openTakeaway(summary: TakeawaySummary) {
-    setPanel({ kind: 'takeaway', summary })
+    setPanel((current) => (current ? { ...current, orderId: null } : current))
   }
 
   return (
@@ -217,25 +207,6 @@ export default function Tables() {
         </section>
       )}
 
-      {takeaways.length > 0 && (
-        <section className="mt-8">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground"><LuShoppingBag className="size-4 text-secondary" /> Takeaway orders awaiting payment</h2>
-          <div className="mt-3 grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {takeaways.map((summary) => (
-              <article key={summary.id} className="rounded-sm border bg-card p-5 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <span className="flex size-9 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuShoppingBag className="size-4" /></span>
-                  <span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">{summary.status}</span>
-                </div>
-                <h3 className="mt-4 font-semibold">Order #{summary.orderNumber}</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Takeaway</p>
-                <button onClick={() => openTakeaway(summary)} className="mt-4 inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><LuReceiptText className="size-3.5" /> View order</button>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false) }}>
           <form onSubmit={saveTable} className="w-full max-w-md rounded-sm border bg-card p-6 shadow-2xl">
@@ -269,7 +240,7 @@ export default function Tables() {
         </div>
       )}
 
-      {panel?.kind === 'table' && panel.orderId === null && (
+      {panel && panel.orderId === null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setPanel(null) }}>
           <div className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
             <div className="flex items-start justify-between">
@@ -303,18 +274,18 @@ export default function Tables() {
         </div>
       )}
 
-      {panel && (panel.kind === 'takeaway' || panel.orderId !== null) && (
+      {panel && panel.orderId !== null && (
         <>
           <OrderSettlementPanel
-            orderId={panel.kind === 'table' ? panel.orderId! : panel.summary.id}
-            title={panel.kind === 'table' ? `${panel.table.label}${panel.table.area ? ` · ${panel.table.area}` : ''}` : 'Takeaway'}
-            subtitle={panel.kind === 'table' && panel.table.activeOrders.length > 1 ? 'One of several orders on this table' : undefined}
+            orderId={panel.orderId}
+            title={`${panel.table.label}${panel.table.area ? ` · ${panel.table.area}` : ''}`}
+            subtitle={panel.table.activeOrders.length > 1 ? 'One of several orders on this table' : undefined}
             profile={profile}
             paymentMethods={paymentMethods}
             onClose={() => setPanel(null)}
             onChanged={() => void load()}
           />
-          {panel.kind === 'table' && panel.table.activeOrders.length > 1 && (
+          {panel.table.activeOrders.length > 1 && (
             <button onClick={backToOrderList} className="fixed left-4 top-4 z-[70] rounded-sm border bg-card px-3 py-1.5 text-xs font-semibold shadow-lg hover:bg-muted">
               ← Back to order list
             </button>
