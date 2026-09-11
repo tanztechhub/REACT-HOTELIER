@@ -243,9 +243,11 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
   // -------- header: business name (large, caps, centered) down through the
   // location's own receipt header text --------
   if (profile?.businessName) {
-    // Double-height only (not double-width) — keeps the full column count
-    // available so longer names don't get sliced off (e.g. "...HOTEL & SPA").
-    e.size(1, 2).bold(true).line(center(profile.businessName.toUpperCase(), cols)).bold(false).size(1, 1)
+    // Plain bold at normal size — the printer's built-in double-height font
+    // (size(1,2)/size(2,2)) renders as ugly, widely-spaced narrow glyphs on
+    // several ESC/POS clones (Aclas included), so emphasis comes from bold
+    // + caps only, matching the rest of the receipt's font.
+    e.bold(true).line(center(profile.businessName.toUpperCase(), cols)).bold(false)
   }
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
   if (place) e.line(center(place, cols))
