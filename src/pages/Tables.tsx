@@ -10,7 +10,15 @@ import { type ReceiptProfile } from '@/components/pos/OrderReceipt'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
 
 type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED' | 'OUT_OF_SERVICE'
-type ActiveOrderSummary = { id: string; orderNumber: number; status: string; createdAt: string }
+type ActiveOrderSummary = {
+  id: string
+  orderNumber: number
+  status: string
+  createdAt: string
+  servedBy: { firstName: string; lastName: string } | null
+  customer: { firstName: string; lastName: string | null } | null
+  itemCount: number
+}
 type LocationOption = { id: string; name: string }
 // A table can carry several separate, independently-billed orders at once —
 // activeOrders lists every one still in flight, not just the latest.
@@ -185,7 +193,7 @@ export default function Tables() {
       ) : (
         <section className="mt-7 grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {tables.map((table) => (
-            <article key={table.id} className="rounded-sm border bg-card p-5 shadow-sm">
+            <article key={table.id} className={cn('rounded-sm border bg-card p-5 shadow-sm', table.status === 'OCCUPIED' && 'border-2 border-warning')}>
               <div className="flex items-start justify-between">
                 <span className="flex size-9 items-center justify-center rounded-sm bg-secondary/10 text-secondary"><LuTable2 className="size-4" /></span>
                 <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_STYLES[table.status])}>{table.status.replace('_', ' ')}</span>
@@ -276,9 +284,17 @@ export default function Tables() {
             ) : (
               <div className="mt-5 space-y-2">
                 {panel.table.activeOrders.map((activeOrder) => (
-                  <button key={activeOrder.id} onClick={() => selectOrderInPanel(activeOrder.id)} className="flex w-full items-center justify-between rounded-sm border p-3 text-left text-sm hover:bg-muted/40">
-                    <span className="font-semibold">Order #{activeOrder.orderNumber}</span>
-                    <span className="text-xs text-muted-foreground">{activeOrder.status}</span>
+                  <button key={activeOrder.id} onClick={() => selectOrderInPanel(activeOrder.id)} className="block w-full rounded-sm border p-3 text-left text-sm hover:bg-muted/40">
+                    <span className="flex items-center justify-between">
+                      <span className="font-semibold">Order #{activeOrder.orderNumber}</span>
+                      <span className="text-xs text-muted-foreground">{activeOrder.status}</span>
+                    </span>
+                    <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span>{new Date(activeOrder.createdAt).toLocaleString()}</span>
+                      <span>{activeOrder.itemCount} item{activeOrder.itemCount === 1 ? '' : 's'}</span>
+                      {activeOrder.servedBy && <span>Waiter: {activeOrder.servedBy.firstName} {activeOrder.servedBy.lastName}</span>}
+                      {activeOrder.customer && <span>Client: {activeOrder.customer.firstName} {activeOrder.customer.lastName ?? ''}</span>}
+                    </span>
                   </button>
                 ))}
               </div>

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuReceiptText, LuUserPlus, LuX } from 'react-icons/lu'
+import { LuCircleAlert, LuLoaderCircle, LuPrinter, LuShare2, LuUserPlus, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/components/ui/Toast'
 import CustomerSelectModal, { type SaleParty } from '@/components/pos/CustomerSelectModal'
 import OrderReceipt, { type ReceiptOrder, type ReceiptProfile } from './OrderReceipt'
 import { printReceipt } from '@/lib/thermalPrinter'
+import { receiptToText, shareReceipt } from '@/lib/receipt'
 
 type PaymentMethod = { id: string; name: string; requiresReference: boolean }
 type CheckedInStay = { id: string; reservationNo: string; customer: { firstName: string; lastName: string | null }; room: { number: string } }
@@ -41,8 +42,8 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showReceipt, setShowReceipt] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [sharing, setSharing] = useState(false)
 
   async function handlePrint() {
     if (!order || printing) return
@@ -54,6 +55,23 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
       toast.error(cause instanceof Error ? cause.message : 'Could not print the receipt')
     } finally {
       setPrinting(false)
+    }
+  }
+
+  async function handleShare() {
+    if (!order || sharing) return
+    setSharing(true)
+    try {
+      let shareUrl: string | undefined
+      try {
+        const r = await api<{ url: string }>(`/pos/orders/${order.id}/share`, { method: 'POST', body: '{}' })
+        shareUrl = r.url
+      } catch { /* endpoint not available — share text only */ }
+      await shareReceipt(receiptToText(order, profile, shareUrl))
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : 'Could not share the receipt')
+    } finally {
+      setSharing(false)
     }
   }
 
@@ -222,55 +240,38 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                 </p>
               )}
 
-              <div className="mt-3 space-y-2">
-                {order.items.map((item) => (
-                  <div key={item.id} className="rounded-sm bg-muted/50 p-3 text-sm">
-                    <div className="flex justify-between font-medium">
-                      <span>{item.quantity}&times; {item.menuItem.name}{item.variant ? ` (${item.variant.name})` : ''}</span>
-                      <span>{formatKes(Number(item.unitPrice) * item.quantity)}</span>
-                    </div>
-                    {item.addons.length > 0 && <p className="mt-1 text-xs text-muted-foreground">+ {item.addons.map((a) => a.addon.name).join(', ')}</p>}
-                  </div>
-                ))}
+              {/* The receipt itself — items, tax breakdown, served-by, time
+                  placed, payments — shown directly rather than behind a
+                  "view receipt" button, since it's already the richest,
+                  most useful view of what's happening with this order. */}
+              <div className="mt-4 -mx-6 border-y bg-muted/20">
+                <OrderReceipt order={order} profile={profile} />
+              </div>
+              <div className="mt-1 flex items-center gap-2 border-b pb-4">
+                <button
+                  onClick={() => void handlePrint()}
+                  disabled={printing}
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50"
+                >
+                  {printing ? <LuLoaderCircle className="size-3.5 animate-spin" /> : <LuPrinter className="size-3.5" />} Print
+                </button>
+                <button
+                  onClick={() => void handleShare()}
+                  disabled={sharing}
+                  className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-sm bg-accent px-3 py-2.5 text-xs font-bold text-accent-foreground disabled:opacity-50"
+                >
+                  {sharing ? <LuLoaderCircle className="size-3.5 animate-spin" /> : <LuShare2 className="size-3.5" />} Share
+                </button>
               </div>
 
-              <div className="mt-4 space-y-1 border-t pt-4 text-sm">
-                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatKes(order.financials.subtotal)}</span></div>
-                {order.financials.discount > 0 && <div className="flex justify-between text-destructive"><span>Discount</span><span>-{formatKes(order.financials.discount)}</span></div>}
-                <div className="flex justify-between text-muted-foreground"><span>Net</span><span>{formatKes(order.financials.net)}</span></div>
-                {(order.financials.taxLines ?? []).map((t) => (
-                  <div key={t.key} className="flex justify-between text-muted-foreground"><span>{t.label}</span><span>{formatKes(t.tax)}</span></div>
-                ))}
-                {(order.financials.taxLines ?? []).length === 0 && order.financials.taxAmount > 0 && (
-                  <div className="flex justify-between text-muted-foreground"><span>Tax</span><span>{formatKes(order.financials.taxAmount)}</span></div>
-                )}
-                <div className="flex justify-between"><span className="text-muted-foreground">Total</span><span className="font-semibold">{formatKes(order.total)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span className="font-semibold text-success">{formatKes(order.paid)}</span></div>
-                <div className="flex justify-between border-t pt-1 text-base">
-                  <span className="font-semibold">Balance due</span>
-                  <span className="flex items-center gap-2">
-                    {order.paymentStatus === 'PARTIAL' && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase text-warning">Part-paid</span>}
-                    {order.paymentStatus === 'UNPAID' && remaining > 0 && order.status === 'COMPLETED' && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase text-destructive">On credit</span>}
-                    <span className="font-bold">{formatKes(remaining)}</span>
-                  </span>
-                </div>
+              <div className="mt-4 flex justify-between border-b pb-4 text-base">
+                <span className="font-semibold">Balance due</span>
+                <span className="flex items-center gap-2">
+                  {order.paymentStatus === 'PARTIAL' && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold uppercase text-warning">Part-paid</span>}
+                  {order.paymentStatus === 'UNPAID' && remaining > 0 && order.status === 'COMPLETED' && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase text-destructive">On credit</span>}
+                  <span className="font-bold">{formatKes(remaining)}</span>
+                </span>
               </div>
-
-              {order.payments.length > 0 && (
-                <div className="mt-4 space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payments</p>
-                  {order.payments.map((p) => (
-                    <div key={p.id} className="flex justify-between text-xs text-muted-foreground">
-                      <span>{p.paymentMethod.name}{p.reference ? ` · ${p.reference}` : ''}</span>
-                      <span>{formatKes(p.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <button onClick={() => setShowReceipt(true)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-sm border py-2.5 text-sm font-semibold hover:bg-muted">
-                <LuReceiptText className="size-4" /> {order.status === 'COMPLETED' ? 'View receipt' : 'Preview bill'}
-              </button>
 
               {order.status === 'PENDING_CANCELLATION' ? (
                 <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 p-3 text-center text-xs font-semibold text-warning">Cancellation requested — waiting for an admin to approve.</p>
@@ -399,25 +400,6 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
           onChange={(p) => void attachCustomer(p)}
           onClose={() => setCustModalOpen(false)}
         />
-      )}
-
-      {showReceipt && order && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReceipt(false) }}>
-          <div className="flex max-h-[88vh] w-full max-w-sm flex-col overflow-hidden rounded-sm bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b p-3 print:hidden">
-              <p className="text-sm font-semibold text-secondary">Receipt</p>
-              <button onClick={() => setShowReceipt(false)} className="rounded-sm p-1.5 text-muted-foreground hover:bg-muted"><LuX className="size-4" /></button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <OrderReceipt order={order} profile={profile} />
-            </div>
-            <div className="border-t p-3 print:hidden">
-              <button onClick={() => void handlePrint()} disabled={printing} className="inline-flex w-full items-center justify-center gap-1.5 rounded-sm bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground disabled:opacity-50">
-                {printing ? <LuLoaderCircle className="size-3.5 animate-spin" /> : <LuPrinter className="size-3.5" />} Print
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </>
   )
