@@ -210,15 +210,13 @@ export default function Reports() {
               ['Capital Invested', formatKes(report.cards.capitalInvested), <LuHandCoins key="e" />],
             ] as const).map(([label, value, icon], i) => <StatCard key={label} index={i} label={label} value={value} icon={icon} />)}
           </section>
-          <section className="mt-3 grid gap-3 sm:grid-cols-3">
+          <section className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {([
               ['Transactions', report.cards.transactions, <LuShoppingBag key="f" />],
               ['Average Sale', formatKes(report.cards.averageSale), <LuTrendingUp key="g" />],
               ['Items Sold', report.cards.itemsSold, <LuShoppingBag key="h" />],
-            ] as const).map(([label, value, icon], i) => <StatCard key={label} index={i + 5} label={label} value={value} icon={icon} />)}
-          </section>
-          <section className="mt-3 grid gap-3 sm:grid-cols-1">
-            <StatCard index={8} label="Menu Orders Completed" value={report.cards.menuOrdersCompleted} icon={<LuReceiptText />} />
+              ['Menu Orders Completed', report.cards.menuOrdersCompleted, <LuReceiptText key="i" />],
+            ] as const).map(([label, value, icon]) => <PlainStat key={label} label={label} value={value} icon={icon} />)}
           </section>
 
           {/* Revenue & Expense Breakdown */}
@@ -473,6 +471,18 @@ function BreakdownSection({ title, note, rows, children }: { title: string; note
         </>
       )}
     </section>
+  )
+}
+
+function PlainStat({ label, value, icon }: { label: string; value: string | number; icon: React.ReactNode }) {
+  return (
+    <div className="rounded-sm border bg-card p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">{icon}</span>
+      </div>
+      <p className="mt-3 font-display text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
   )
 }
 
