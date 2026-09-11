@@ -14,7 +14,6 @@ export function receiptToText(order: ReceiptOrder, profile: ReceiptProfile, shar
   if (order.location?.name) lines.push(order.location.name)
   const phone = receiptPhone(order, profile)
   if (phone) lines.push(phone)
-  if (profile?.kraPin) lines.push(`PIN: ${profile.kraPin}`)
   const header = receiptHeaderText(order)
   if (header) lines.push(header)
   lines.push(RULE)

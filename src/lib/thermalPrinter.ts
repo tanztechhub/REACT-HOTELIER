@@ -243,14 +243,15 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
   // -------- header: business name (large, caps, centered) down through the
   // location's own receipt header text --------
   if (profile?.businessName) {
-    e.size(2, 2).bold(true).line(center(profile.businessName.toUpperCase(), Math.ceil(cols / 2))).bold(false).size(1, 1)
+    // Double-height only (not double-width) — keeps the full column count
+    // available so longer names don't get sliced off (e.g. "...HOTEL & SPA").
+    e.size(1, 2).bold(true).line(center(profile.businessName.toUpperCase(), cols)).bold(false).size(1, 1)
   }
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
   if (place) e.line(center(place, cols))
   if (order.location?.name) e.line(center(order.location.name, cols))
   const phone = receiptPhone(order, profile)
   if (phone) e.line(center(phone, cols))
-  if (profile?.kraPin) e.line(center(`PIN: ${profile.kraPin}`, cols))
   const header = receiptHeaderText(order)
   if (header) for (const l of header.split('\n')) e.line(center(l, cols))
   e.rule()

@@ -61,7 +61,6 @@ export default function OrderReceipt({ order, profile }: { order: ReceiptOrder; 
         {(profile?.address || profile?.city) && <p className="mt-1 text-xs text-gray-600">{[profile?.address, profile?.city].filter(Boolean).join(', ')}</p>}
         {order.location?.name && <p className="mt-0.5 text-[11px] text-gray-500">{order.location.name}</p>}
         {phone && <p className="text-xs text-gray-600">{phone}</p>}
-        {profile?.kraPin && <p className="text-xs text-gray-600">PIN: {profile.kraPin}</p>}
         {header && <p className="mt-1.5 whitespace-pre-wrap text-xs text-gray-600">{header}</p>}
       </div>
 
