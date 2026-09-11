@@ -21,12 +21,13 @@ import { PERMISSION_SECTIONS as sections, sectionLabels, type PermissionSection 
 // Action-level capabilities — separate from the sections above, which only
 // hide sidebar/routes client-side. These are checked by the server on the
 // specific actions they name, so unlike a section they actually reject a
-// request. Only capabilities with a real enforcement point are offered here;
-// the Permission enum on the backend may carry more that aren't live yet.
-type Capability = 'POS_APPROVE_CANCELLATION'
-const capabilities: Capability[] = ['POS_APPROVE_CANCELLATION']
+// request.
+type Capability = 'POS_APPROVE_CANCELLATION' | 'POS_APPROVE_COUNTER' | 'POS_VIEW_ALL_ORDERS'
+const capabilities: Capability[] = ['POS_APPROVE_CANCELLATION', 'POS_APPROVE_COUNTER', 'POS_VIEW_ALL_ORDERS']
 const capabilityLabels: Record<Capability, { label: string; hint: string }> = {
   POS_APPROVE_CANCELLATION: { label: 'Approve order cancellations', hint: 'Decide a waiter’s cancellation request (Sales ▸ Approvals) — approve or reject it.' },
+  POS_APPROVE_COUNTER: { label: 'Approve counter orders', hint: 'Mark an order served at a Counter-mode location (Locations ▸ Order Handling) — the counter’s approval step.' },
+  POS_VIEW_ALL_ORDERS: { label: 'See every order at a location', hint: 'Without this, Active Orders / Completed / Cancelled only show the orders this role’s own employees rang up. Also implied by the two capabilities above.' },
 }
 
 type Role = {
