@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
+  LuBanknote,
   LuCircleAlert,
   LuCircleCheck,
   LuLoaderCircle,
@@ -37,6 +38,17 @@ type Supplier = {
   updatedByEmployee: { id: string; firstName: string; lastName: string } | null
 }
 type Summary = { total: number; active: number; totalBalance: number }
+type PaymentMethod = { id: string; name: string; requiresReference: boolean }
+type SupplierPayment = {
+  id: string
+  paymentNo: string
+  amount: string
+  reference: string | null
+  note: string | null
+  paidAt: string
+  paymentMethod: { id: string; name: string } | null
+  createdByEmployee: { id: string; firstName: string; lastName: string } | null
+}
 
 const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { maximumFractionDigits: 2 })}`
 
@@ -78,6 +90,7 @@ export default function Suppliers() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [paying, setPaying] = useState<Supplier | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -274,6 +287,7 @@ export default function Suppliers() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex justify-end gap-1">
+                        <button onClick={() => setPaying(supplier)} title="Record a payment" className="rounded-sm p-2 text-muted-foreground hover:bg-success/10 hover:text-success"><LuBanknote /></button>
                         <button onClick={() => openEdit(supplier)} title="Edit supplier" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuPencil /></button>
                         <button onClick={() => void deleteSupplier(supplier)} title="Delete supplier" className="rounded-sm p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><LuTrash2 /></button>
                       </div>
@@ -312,7 +326,7 @@ export default function Suppliers() {
               {editing ? (
                 <Field label="Current Balance (KES)" className="sm:col-span-2">
                   <input disabled className="input font-semibold opacity-70" value={formatKes(Number(editing.balance))} />
-                  <span className="mt-1 block text-xs text-muted-foreground">Maintained from purchases and payments once those are wired up.</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Rises with Goods Received, falls with recorded payments — use the payment icon on this supplier's row.</span>
                 </Field>
               ) : (
                 <Field label="Opening Balance (KES)" className="sm:col-span-2">
@@ -354,6 +368,129 @@ export default function Suppliers() {
           </form>
         </div>
       )}
+
+      {paying && (
+        <PaySupplierModal
+          supplier={paying}
+          onClose={() => setPaying(null)}
+          onPaid={(updated) => {
+            setPaying(null)
+            toast.success('Payment recorded.')
+            setSuppliers((cur) => cur.map((s) => (s.id === updated.id ? updated : s)))
+            void load()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PaySupplierModal({ supplier, onClose, onPaid }: { supplier: Supplier; onClose: () => void; onPaid: (updated: Supplier) => void }) {
+  const toast = useToast()
+  const [methods, setMethods] = useState<PaymentMethod[]>([])
+  const [payments, setPayments] = useState<SupplierPayment[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(true)
+  const [amount, setAmount] = useState('')
+  const [paymentMethodId, setPaymentMethodId] = useState('')
+  const [reference, setReference] = useState('')
+  const [note, setNote] = useState('')
+  const [paidAt, setPaidAt] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ methods: PaymentMethod[] }>('/payment-methods?activeOnly=true').then((r) => {
+      setMethods(r.methods)
+      setPaymentMethodId((id) => id || r.methods[0]?.id || '')
+    }).catch(() => {})
+    api<{ payments: SupplierPayment[] }>(`/suppliers/${supplier.id}/payments`).then((r) => setPayments(r.payments)).catch(() => {}).finally(() => setLoadingHistory(false))
+  }, [supplier.id])
+
+  const selectedMethod = methods.find((m) => m.id === paymentMethodId)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!(Number(amount) > 0)) { setError('Enter an amount greater than zero'); return }
+    if (!paymentMethodId) { setError('Choose a payment method'); return }
+    if (selectedMethod?.requiresReference && !reference.trim()) { setError(`${selectedMethod.name} requires a reference number`); return }
+    setSaving(true)
+    setError('')
+    try {
+      const { supplier: updated, payment } = await api<{ supplier: Supplier; payment: SupplierPayment }>(`/suppliers/${supplier.id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ amount: Number(amount), paymentMethodId, reference: reference.trim() || undefined, note: note.trim() || undefined, paidAt }),
+      })
+      setPayments((cur) => [payment, ...cur])
+      onPaid(updated)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not record this payment'
+      setError(message)
+      toast.error(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <form onSubmit={submit} className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+        <div>
+          <p className="text-sm font-semibold text-secondary">Supplier payment</p>
+          <h2 className="mt-1 font-display text-2xl font-semibold">Pay {supplier.name}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Currently owed: <span className="font-semibold">{formatKes(Number(supplier.balance))}</span></p>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <Field label="Amount (KES)" required>
+            <input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" autoFocus />
+          </Field>
+          <Field label="Payment Method" required>
+            <select required className="input" value={paymentMethodId} onChange={(e) => setPaymentMethodId(e.target.value)}>
+              {methods.length === 0 && <option value="">No active payment methods</option>}
+              {methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </Field>
+          <Field label={selectedMethod?.requiresReference ? 'Reference *' : 'Reference'}>
+            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. M-Pesa code" className="input" />
+          </Field>
+          <Field label="Date"><input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} className="input" /></Field>
+          <Field label="Note" className="sm:col-span-2"><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" className="input" /></Field>
+        </div>
+
+        {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+        <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+          <button type="button" onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Close</button>
+          <button disabled={saving} className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60">
+            {saving && <LuLoaderCircle className="animate-spin" />} Record payment
+          </button>
+        </div>
+
+        <div className="mt-6 border-t pt-5">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment history</p>
+          {loadingHistory ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : payments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No payments recorded yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {payments.map((p) => (
+                <div key={p.id} className="flex items-center justify-between gap-3 rounded-sm border bg-muted/40 px-3 py-2 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="font-medium">{formatKes(Number(p.amount))}</span>
+                    <span className="text-xs text-muted-foreground"> · {p.paymentMethod?.name ?? '—'} · {new Date(p.paidAt).toLocaleDateString()}</span>
+                    {p.note && <span className="block truncate text-xs text-muted-foreground">{p.note}</span>}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{p.paymentNo}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </form>
     </div>
   )
 }
