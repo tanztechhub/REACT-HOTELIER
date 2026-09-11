@@ -250,16 +250,20 @@ export default function PointOfSale() {
     })
   }
 
-  async function loadActiveOrders() {
-    setActiveOrdersLoading(true)
+  // `silent` skips the loading flag — used by the background 15s poll (and
+  // by refreshes after an action already in flight) so the whole section
+  // doesn't blank out to a spinner under someone's cursor. The spinner is
+  // only for the real first load of a tab/location switch.
+  async function loadActiveOrders(silent = false) {
+    if (!silent) setActiveOrdersLoading(true)
     try {
       const query = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
       const response = await api<{ orders: ActiveOrder[] }>(`/pos/orders?channel=FOOD${query}`)
       setActiveOrders((response.orders ?? []).filter((o) => NON_FINAL_STATUSES.includes(o.status)))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not load active orders')
+      if (!silent) setError(cause instanceof Error ? cause.message : 'Could not load active orders')
     } finally {
-      setActiveOrdersLoading(false)
+      if (!silent) setActiveOrdersLoading(false)
     }
   }
 
@@ -328,7 +332,7 @@ export default function PointOfSale() {
   // other orders — a counter/kitchen order going READY elsewhere shouldn't
   // need a manual refresh to notice.
   useEffect(() => {
-    const timer = window.setInterval(() => void loadActiveOrders(), 15000)
+    const timer = window.setInterval(() => void loadActiveOrders(true), 15000)
     return () => window.clearInterval(timer)
   }, [effectiveLocationId])
   useEffect(() => {
@@ -477,7 +481,7 @@ export default function PointOfSale() {
     setServingId(orderId)
     try {
       await api(`/pos/orders/${orderId}/serve`, { method: 'PATCH' })
-      void loadActiveOrders()
+      void loadActiveOrders(true)
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Could not mark the order served')
     } finally {
@@ -1008,7 +1012,7 @@ export default function PointOfSale() {
           profile={profile as ReceiptProfile}
           paymentMethods={paymentMethods}
           onClose={() => setSettlementOrderId(null)}
-          onChanged={() => { void loadActiveOrders(); if (tab === 'COMPLETED') void loadCompletedOrders() }}
+          onChanged={() => { void loadActiveOrders(true); if (tab === 'COMPLETED') void loadCompletedOrders() }}
         />
       )}
 
@@ -1018,8 +1022,8 @@ export default function PointOfSale() {
           menuItems={menuItems}
           allAddons={allAddons}
           onClose={() => setAddItemsOrder(null)}
-          onRefresh={() => void loadActiveOrders()}
-          onAdded={() => { setAddItemsOrder(null); void loadActiveOrders() }}
+          onRefresh={() => void loadActiveOrders(true)}
+          onAdded={() => { setAddItemsOrder(null); void loadActiveOrders(true) }}
         />
       )}
 
