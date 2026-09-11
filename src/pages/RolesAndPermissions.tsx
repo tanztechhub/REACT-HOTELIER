@@ -18,17 +18,29 @@ import { cn } from '@/lib/utils'
 import StatCard from '@/components/ui/StatCard'
 import { PERMISSION_SECTIONS as sections, sectionLabels, type PermissionSection as Section } from '@/config/navigation'
 
+// Action-level capabilities — separate from the sections above, which only
+// hide sidebar/routes client-side. These are checked by the server on the
+// specific actions they name, so unlike a section they actually reject a
+// request. Only capabilities with a real enforcement point are offered here;
+// the Permission enum on the backend may carry more that aren't live yet.
+type Capability = 'POS_APPROVE_CANCELLATION'
+const capabilities: Capability[] = ['POS_APPROVE_CANCELLATION']
+const capabilityLabels: Record<Capability, { label: string; hint: string }> = {
+  POS_APPROVE_CANCELLATION: { label: 'Approve order cancellations', hint: 'Decide a waiter’s cancellation request (Sales ▸ Approvals) — approve or reject it.' },
+}
+
 type Role = {
   id: string
   name: string
   description: string | null
   isSystemRole: boolean
   allowedSections: Section[]
+  permissions: Capability[]
   employeeCount: number
 }
 type Summary = { total: number; system: number; custom: number }
-type RoleForm = { name: string; description: string; allowedSections: Section[] }
-const emptyForm: RoleForm = { name: '', description: '', allowedSections: [] }
+type RoleForm = { name: string; description: string; allowedSections: Section[]; permissions: Capability[] }
+const emptyForm: RoleForm = { name: '', description: '', allowedSections: [], permissions: [] }
 
 export default function RolesAndPermissions() {
   const toast = useToast()
@@ -69,7 +81,7 @@ export default function RolesAndPermissions() {
 
   function openEdit(role: Role) {
     setEditing(role)
-    setForm({ name: role.name, description: role.description ?? '', allowedSections: role.allowedSections })
+    setForm({ name: role.name, description: role.description ?? '', allowedSections: role.allowedSections, permissions: role.permissions })
     setError('')
     setShowForm(true)
   }
@@ -80,6 +92,15 @@ export default function RolesAndPermissions() {
       allowedSections: f.allowedSections.includes(section)
         ? f.allowedSections.filter((s) => s !== section)
         : [...f.allowedSections, section],
+    }))
+  }
+
+  function toggleCapability(capability: Capability) {
+    setForm((f) => ({
+      ...f,
+      permissions: f.permissions.includes(capability)
+        ? f.permissions.filter((p) => p !== capability)
+        : [...f.permissions, capability],
     }))
   }
 
@@ -129,7 +150,7 @@ export default function RolesAndPermissions() {
         <div>
           <p className="text-sm font-semibold text-secondary">Team</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Roles &amp; Permissions</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Control which sidebar sections each role can see.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Control which sidebar sections each role can see, and which server-enforced actions it can take.</p>
         </div>
         <Button onClick={openCreate}>
           <LuPlus /> Add role
@@ -171,6 +192,7 @@ export default function RolesAndPermissions() {
                 <tr>
                   <th className="px-5 py-3">Role</th>
                   <th className="px-5 py-3">Visible Sections</th>
+                  <th className="px-5 py-3">Capabilities</th>
                   <th className="px-5 py-3">Employees</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
@@ -191,6 +213,15 @@ export default function RolesAndPermissions() {
                           ? <span className="text-xs text-muted-foreground">No sections granted</span>
                           : role.allowedSections.map((s) => (
                             <span key={s} className="rounded-sm bg-secondary/10 px-2 py-0.5 text-xs font-semibold text-secondary">{sectionLabels[s]}</span>
+                          ))}
+                      </div>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex max-w-xs flex-wrap gap-1">
+                        {role.permissions.length === 0
+                          ? <span className="text-xs text-muted-foreground">None</span>
+                          : role.permissions.map((p) => (
+                            <span key={p} className="rounded-sm bg-accent/10 px-2 py-0.5 text-xs font-semibold text-accent">{capabilityLabels[p]?.label ?? p}</span>
                           ))}
                       </div>
                     </td>
@@ -254,6 +285,31 @@ export default function RolesAndPermissions() {
                       >
                         <input type="checkbox" checked={checked} onChange={() => toggleSection(section)} className="size-4 accent-secondary" />
                         {sectionLabels[section]}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Capabilities</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Specific actions this role is allowed to perform — enforced by the server, not just hidden in the sidebar.</p>
+                <div className="mt-2.5 space-y-2">
+                  {capabilities.map((capability) => {
+                    const checked = form.permissions.includes(capability)
+                    const { label, hint } = capabilityLabels[capability]
+                    return (
+                      <label
+                        key={capability}
+                        className={cn(
+                          'flex cursor-pointer items-start gap-2.5 rounded-sm border px-3 py-2.5 text-sm transition-colors',
+                          checked ? 'border-secondary bg-secondary/10' : 'border-border hover:bg-muted',
+                        )}
+                      >
+                        <input type="checkbox" checked={checked} onChange={() => toggleCapability(capability)} className="mt-0.5 size-4 accent-secondary" />
+                        <span>
+                          <span className={cn('block font-medium', checked && 'text-secondary')}>{label}</span>
+                          <span className="block text-xs text-muted-foreground">{hint}</span>
+                        </span>
                       </label>
                     )
                   })}
