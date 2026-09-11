@@ -210,6 +210,21 @@ async function sendBridge(bytes: Uint8Array, s: ThermalSettings): Promise<void> 
 
 const money = (v: number | string) => `KES ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+/**
+ * Centers by literal space-padding instead of the encoder's own
+ * `align('center')` — that call has an ordering bug in
+ * @point-of-sale/receipt-printer-encoder@3: the moment it's used, the
+ * padding it computes gets hoisted to byte 0 of the WHOLE buffer, ahead of
+ * the ESC @ initialize command, so the printer receives raw spaces before
+ * it's even reset and the rest renders as nothing. Reproduced and confirmed
+ * with a hex dump — `align('left')` (the default) and `.table()`'s
+ * column-level `align: 'right'` are unaffected, so those stay as they are.
+ */
+function center(text: string, width: number): string {
+  const t = text.slice(0, width)
+  return ' '.repeat(Math.max(0, Math.floor((width - t.length) / 2))) + t
+}
+
 export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, s: ThermalSettings): Uint8Array {
   const cols = Math.max(24, Math.min(64, Math.round(s.columns) || 48))
   const e = new ReceiptPrinterEncoder({
@@ -224,13 +239,12 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
   const nameW = cols - priceW - 1
   const row = (l: string, r: string) => e.table([{ width: nameW, align: 'left' }, { width: priceW, align: 'right' }], [[l, r]])
 
-  e.align('center')
-  if (profile?.businessName) e.bold(true).line(profile.businessName).bold(false)
+  if (profile?.businessName) e.bold(true).line(center(profile.businessName, cols)).bold(false)
   const place = [profile?.address, profile?.city].filter(Boolean).join(', ')
-  if (place) e.line(place)
-  if (profile?.primaryPhone) e.line(profile.primaryPhone)
-  if (profile?.kraPin) e.line(`PIN: ${profile.kraPin}`)
-  e.align('left').rule()
+  if (place) e.line(center(place, cols))
+  if (profile?.primaryPhone) e.line(center(profile.primaryPhone, cols))
+  if (profile?.kraPin) e.line(center(`PIN: ${profile.kraPin}`, cols))
+  e.rule()
 
   e.line(`Order #${order.orderNumber}`)
   e.line(new Date(order.updatedAt).toLocaleString())
@@ -256,7 +270,7 @@ export function buildReceiptBytes(order: ReceiptOrder, profile: ReceiptProfile, 
     for (const p of order.payments) row(p.paymentMethod.name, money(p.amount))
   }
 
-  e.newline(2).align('center').line('Thank you').newline(4).cut()
+  e.newline(2).line(center('Thank you', cols)).newline(4).cut()
   return e.encode()
 }
 
