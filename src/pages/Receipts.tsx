@@ -199,7 +199,7 @@ export default function Receipts() {
         <section className="mt-7 overflow-hidden rounded-sm border bg-card">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="bg-primary text-xs uppercase tracking-wide text-primary-foreground">
                 <tr>
                   <th className="px-5 py-3">Order</th>
                   <th className="px-5 py-3">Table</th>
