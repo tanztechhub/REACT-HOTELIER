@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { LuMenu, LuRefreshCw } from 'react-icons/lu'
+import { LuChevronsDown, LuChevronsUp, LuMenu, LuRefreshCw } from 'react-icons/lu'
 import Sidebar from '@/components/layout/Sidebar'
 import LicenseBanner from '@/components/layout/LicenseBanner'
 import { useAppSelector } from '@/store/hooks'
@@ -18,8 +18,10 @@ const PTR_MAX = 100
 export default function AppShell() {
   const [mobileNav, setMobileNav] = useState(false)
   const logoUrl = useAppSelector((s) => s.tenant.logoUrl)
+  const location = useLocation()
 
   const mainRef = useRef<HTMLElement>(null)
+  const [jump, setJump] = useState({ scrollable: false, atTop: true, atBottom: true })
   const [pull, setPull] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const drag = useRef<{ startY: number; active: boolean } | null>(null)
@@ -73,6 +75,39 @@ export default function AppShell() {
       el.removeEventListener('touchcancel', onEnd)
     }
   }, [refreshing])
+
+  // Small "jump to top / jump to bottom" buttons for mobile — a long scrollable
+  // page (e.g. a POS product grid) otherwise leaves the order widget at the
+  // very bottom with a long scroll to reach it. Only shown once content
+  // actually overflows the viewport; a MutationObserver catches content that
+  // grows in after mount (e.g. async-loaded product lists).
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    let ticking = false
+    const update = () => {
+      ticking = false
+      const scrollable = el.scrollHeight > el.clientHeight + 40
+      const atTop = el.scrollTop <= 8
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 8
+      setJump({ scrollable, atTop, atBottom })
+    }
+    const schedule = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(update)
+    }
+    update()
+    el.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    const mo = new MutationObserver(schedule)
+    mo.observe(el, { childList: true, subtree: true })
+    return () => {
+      el.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      mo.disconnect()
+    }
+  }, [location.pathname])
 
   const indicatorY = (refreshing ? PTR_THRESHOLD : pull) - 44
   const progress = Math.min(pull / PTR_THRESHOLD, 1)
@@ -149,6 +184,29 @@ export default function AppShell() {
           )}
           <Outlet />
         </main>
+
+        {jump.scrollable && (
+          <div className="fixed bottom-24 right-4 z-30 flex flex-col gap-2 lg:hidden">
+            <button
+              type="button"
+              onClick={() => mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+              disabled={jump.atTop}
+              aria-label="Scroll to top"
+              className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-lg transition-opacity disabled:opacity-40"
+            >
+              <LuChevronsUp className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => mainRef.current?.scrollTo({ top: mainRef.current.scrollHeight, behavior: 'smooth' })}
+              disabled={jump.atBottom}
+              aria-label="Scroll to bottom"
+              className="flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-lg transition-opacity disabled:opacity-40"
+            >
+              <LuChevronsDown className="size-5" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
