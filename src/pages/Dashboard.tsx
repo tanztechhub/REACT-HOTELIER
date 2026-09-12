@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuCircleAlert, LuClipboardList, LuLoaderCircle, LuLock,
-  LuReceiptText, LuTable2, LuTrendingUp, LuUndo2, LuUsers, LuWallet,
+  LuReceiptText, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
@@ -37,7 +37,13 @@ type LocationBucket = { locationId: string | null; name: string; revenue: number
 type MethodBucket = { name: string; total: number; percentOfTotal: number }
 type EmployeeBucket = { name: string; total: number; percentOfTotal: number }
 type CustomerBucket = { name: string; revenue: number; percentOfTotal: number }
-type Debtors = { total: number }
+type Debtors = {
+  total: number
+  customers: { total: number; top: { id: string; name: string; balance: number }[] }
+  unsettledFolios: { total: number; top: { folioNo: string; reservationNo: string; guestName: string; balance: number }[] }
+}
+type Creditors = { total: number; top: { id: string; name: string; balance: number }[] }
+type TaxLine = { key: string; label: string; net: number; tax: number; gross: number }
 
 type SalesReport = {
   cards: Cards
@@ -48,6 +54,9 @@ type SalesReport = {
   byEmployee: EmployeeBucket[]
   byCustomer: CustomerBucket[]
   debtors: Debtors
+  creditors: Creditors
+  expectedProfit: number
+  taxBreakdown: TaxLine[]
   returns: { count: number; value: number }
 }
 
@@ -70,7 +79,14 @@ const NON_FINAL_STATUSES = ['OPEN', 'PREPARING', 'READY', 'SERVED']
 const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
 type LocationOption = { id: string; name: string }
 
-function RevenueDashboard() {
+/** 'operations' (Super Admin, Manager): the full floor-and-money picture.
+ * 'finance' (Accountant): money only — Accountant's allowedSections are just
+ * FINANCE/REPORTS, no SALES/KITCHEN, so Active Orders/Tables/sales-mix
+ * breakdowns would be showing them into sections they can't otherwise open.
+ * Gets the debtors/creditors/expected-profit and tax panels instead, which
+ * the operations variant skips (Super Admin/Manager get that same detail
+ * from the full Sales Report already). */
+function RevenueDashboard({ variant }: { variant: 'operations' | 'finance' }) {
   const [locations, setLocations] = useState<LocationOption[]>([])
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
 
@@ -88,9 +104,9 @@ function RevenueDashboard() {
       const locQuery = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
       const [salesResponse, ordersResponse, tablesResponse, transactionsResponse, locationResponse] = await Promise.all([
         api<SalesReport>(`/reports/sales?period=day${locQuery}`),
-        api<{ orders: OrderSummary[] }>(`/pos/orders?channel=FOOD${locQuery}`),
-        api<{ tables: TableSummary[] }>(`/tables${effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''}`),
-        api<{ transactions: TransactionRow[] }>(`/transactions?limit=8${locQuery}`),
+        variant === 'operations' ? api<{ orders: OrderSummary[] }>(`/pos/orders?channel=FOOD${locQuery}`) : Promise.resolve({ orders: [] }),
+        variant === 'operations' ? api<{ tables: TableSummary[] }>(`/tables${effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''}`) : Promise.resolve({ tables: [] }),
+        api<{ transactions: TransactionRow[] }>(`/transactions?limit=${variant === 'finance' ? 12 : 8}${locQuery}`),
         api<{ locations: LocationOption[] }>('/locations'),
       ])
       setReport(salesResponse)
@@ -103,7 +119,7 @@ function RevenueDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [effectiveLocationId])
+  }, [effectiveLocationId, variant])
 
   useEffect(() => { void load() }, [load])
 
@@ -140,40 +156,103 @@ function RevenueDashboard() {
         </div>
       </section>
 
-      <section className="mt-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Right now</p>
-        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard index={4} label="Active Orders" value={String(activeOrderCount)} icon={<LuClipboardList className="size-4" />} hint="Open, preparing, ready or served" />
-          <StatCard index={5} label="Tables Occupied" value={`${occupiedTables.length} / ${activeTables.length}`} icon={<LuTable2 className="size-4" />} hint={estimatedGuests > 0 ? `~${estimatedGuests} guests seated now` : 'No one seated right now'} />
-          <StatCard tone="warn" label="Sales on Credit" value={formatKes(report.debtors.total)} icon={<LuUsers className="size-4" />} hint="Owed by customers + unsettled rooms" />
-          <StatCard index={6} label="Processed Returns" value={String(report.returns.count)} icon={<LuUndo2 className="size-4" />} hint={report.returns.value > 0 ? formatKes(report.returns.value) : undefined} />
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        <MiniBreakdown title="Sales by Location" rows={report.salesByLocation.map((l) => ({ key: l.locationId ?? 'unassigned', label: l.name, value: l.revenue, percent: l.percentOfTotal }))} />
-        <MiniBreakdown title="Sales by Payment Method" rows={report.byPaymentMethod.map((m) => ({ key: m.name, label: m.name, value: m.total, percent: m.percentOfTotal }))} />
-        <MiniBreakdown title="Sales by Employee" rows={report.byEmployee.map((e) => ({ key: e.name, label: e.name, value: e.total, percent: e.percentOfTotal }))} />
-        <MiniBreakdown title="Sales by Customer" rows={report.byCustomer.map((c) => ({ key: c.name, label: c.name, value: c.revenue, percent: c.percentOfTotal }))} />
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        <div className="overflow-hidden rounded-sm border bg-card">
-          <header className="flex items-center justify-between border-b p-4">
-            <h2 className="font-semibold">Top 10 Selling Menu Items</h2>
-            <Link to="/reports" className="text-xs font-semibold text-secondary hover:underline">Full report →</Link>
-          </header>
-          {report.topItems.length === 0 ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">No items sold today yet.</p>
-          ) : (
-            <table className="w-full text-left text-sm">
-              <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-right">Qty</th><th className="px-4 py-2.5 text-right">Revenue</th></tr></thead>
-              <tbody>{report.topItems.map((i, idx) => (
-                <tr key={i.name} className="border-t"><td className="px-4 py-2.5">{idx + 1}. {i.name}</td><td className="px-4 py-2.5 text-right tabular-nums">{i.qty}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(i.revenue)}</td></tr>
-              ))}</tbody>
-            </table>
+      {variant === 'operations' ? (
+        <section className="mt-6">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Right now</p>
+          <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard index={4} label="Active Orders" value={String(activeOrderCount)} icon={<LuClipboardList className="size-4" />} hint="Open, preparing, ready or served" />
+            <StatCard index={5} label="Tables Occupied" value={`${occupiedTables.length} / ${activeTables.length}`} icon={<LuTable2 className="size-4" />} hint={estimatedGuests > 0 ? `~${estimatedGuests} guests seated now` : 'No one seated right now'} />
+            <StatCard tone="warn" label="Sales on Credit" value={formatKes(report.debtors.total)} icon={<LuUsers className="size-4" />} hint="Owed by customers + unsettled rooms" />
+            <StatCard index={6} label="Processed Returns" value={String(report.returns.count)} icon={<LuUndo2 className="size-4" />} hint={report.returns.value > 0 ? formatKes(report.returns.value) : undefined} />
+          </div>
+        </section>
+      ) : (
+        <section className="mt-6 overflow-hidden rounded-sm border bg-card">
+          <header className="border-b p-4"><h2 className="font-semibold">Debtors, Creditors &amp; Expected Profit</h2><p className="text-xs text-muted-foreground">A live snapshot — not scoped to today, unlike the cards above.</p></header>
+          <div className="grid gap-3 p-4 sm:grid-cols-3">
+            <div className="rounded-sm border bg-secondary/5 p-3.5">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-secondary"><LuUsers className="size-3.5" /> Debtors</p>
+              <p className="mt-1 text-xl font-semibold">{formatKes(report.debtors.total)}</p>
+              <p className="text-xs text-muted-foreground">Owed to you — customer credit + unsettled rooms</p>
+            </div>
+            <div className="rounded-sm border bg-destructive/5 p-3.5">
+              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-destructive"><LuTriangleAlert className="size-3.5" /> Creditors</p>
+              <p className="mt-1 text-xl font-semibold">{formatKes(report.creditors.total)}</p>
+              <p className="text-xs text-muted-foreground">Owed to suppliers</p>
+            </div>
+            <div className={cn('rounded-sm border p-3.5', report.expectedProfit >= 0 ? 'bg-success/5' : 'bg-destructive/5')}>
+              <p className={cn('flex items-center gap-2 text-xs font-semibold uppercase tracking-wide', report.expectedProfit >= 0 ? 'text-success' : 'text-destructive')}><LuTrendingUp className="size-3.5" /> Expected Profit</p>
+              <p className="mt-1 text-xl font-semibold">{formatKes(report.expectedProfit)}</p>
+              <p className="text-xs text-muted-foreground">Net Profit + debtors − creditors</p>
+            </div>
+          </div>
+          {(report.debtors.customers.top.length > 0 || report.debtors.unsettledFolios.top.length > 0 || report.creditors.top.length > 0) && (
+            <div className="grid gap-4 border-t p-4 sm:grid-cols-2">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who owes you</p>
+                <div className="space-y-1.5">
+                  {report.debtors.customers.top.slice(0, 6).map((c) => <RowLine key={c.id} label={c.name} value={formatKes(c.balance)} />)}
+                  {report.debtors.unsettledFolios.top.slice(0, 6).map((f) => <RowLine key={f.folioNo} label={`${f.guestName} (${f.reservationNo})`} value={formatKes(f.balance)} />)}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who you owe</p>
+                {report.creditors.top.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">You don't owe any supplier right now.</p>
+                ) : (
+                  <div className="space-y-1.5">{report.creditors.top.slice(0, 6).map((s) => <RowLine key={s.id} label={s.name} value={formatKes(s.balance)} />)}</div>
+                )}
+              </div>
+            </div>
           )}
-        </div>
+        </section>
+      )}
+
+      {variant === 'operations' ? (
+        <section className="mt-6 grid gap-4 lg:grid-cols-2">
+          <MiniBreakdown title="Sales by Location" rows={report.salesByLocation.map((l) => ({ key: l.locationId ?? 'unassigned', label: l.name, value: l.revenue, percent: l.percentOfTotal }))} />
+          <MiniBreakdown title="Sales by Payment Method" rows={report.byPaymentMethod.map((m) => ({ key: m.name, label: m.name, value: m.total, percent: m.percentOfTotal }))} />
+          <MiniBreakdown title="Sales by Employee" rows={report.byEmployee.map((e) => ({ key: e.name, label: e.name, value: e.total, percent: e.percentOfTotal }))} />
+          <MiniBreakdown title="Sales by Customer" rows={report.byCustomer.map((c) => ({ key: c.name, label: c.name, value: c.revenue, percent: c.percentOfTotal }))} />
+        </section>
+      ) : (
+        <section className="mt-6 grid gap-4 lg:grid-cols-2">
+          <MiniBreakdown title="Sales by Payment Method" rows={report.byPaymentMethod.map((m) => ({ key: m.name, label: m.name, value: m.total, percent: m.percentOfTotal }))} />
+          <div className="overflow-hidden rounded-sm border bg-card">
+            <header className="border-b p-4"><h2 className="font-semibold">Tax Breakdown — Today</h2></header>
+            {report.taxBreakdown.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">No taxable sales today.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Treatment</th><th className="px-4 py-2.5 text-right">Net</th><th className="px-4 py-2.5 text-right">Tax</th><th className="px-4 py-2.5 text-right">Gross</th></tr></thead>
+                <tbody>{report.taxBreakdown.map((t) => (
+                  <tr key={t.key} className="border-t"><td className="px-4 py-2.5 font-medium">{t.label}</td><td className="px-4 py-2.5 text-right tabular-nums">{formatKes(t.net)}</td><td className="px-4 py-2.5 text-right tabular-nums">{formatKes(t.tax)}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(t.gross)}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className={cn('mt-6 grid gap-4', variant === 'operations' && 'lg:grid-cols-2')}>
+        {variant === 'operations' && (
+          <div className="overflow-hidden rounded-sm border bg-card">
+            <header className="flex items-center justify-between border-b p-4">
+              <h2 className="font-semibold">Top 10 Selling Menu Items</h2>
+              <Link to="/reports" className="text-xs font-semibold text-secondary hover:underline">Full report →</Link>
+            </header>
+            {report.topItems.length === 0 ? (
+              <p className="p-6 text-center text-sm text-muted-foreground">No items sold today yet.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead className="bg-primary text-xs uppercase text-primary-foreground"><tr><th className="px-4 py-2.5">Item</th><th className="px-4 py-2.5 text-right">Qty</th><th className="px-4 py-2.5 text-right">Revenue</th></tr></thead>
+                <tbody>{report.topItems.map((i, idx) => (
+                  <tr key={i.name} className="border-t"><td className="px-4 py-2.5">{idx + 1}. {i.name}</td><td className="px-4 py-2.5 text-right tabular-nums">{i.qty}</td><td className="px-4 py-2.5 text-right tabular-nums font-semibold">{formatKes(i.revenue)}</td></tr>
+                ))}</tbody>
+              </table>
+            )}
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-sm border bg-card">
           <header className="flex items-center justify-between border-b p-4">
@@ -224,6 +303,15 @@ function RevenueDashboard() {
   )
 }
 
+function RowLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-sm border bg-muted/30 px-3 py-2 text-sm">
+      <span className="truncate">{label}</span>
+      <span className="shrink-0 pl-2 font-semibold tabular-nums">{value}</span>
+    </div>
+  )
+}
+
 function MiniBreakdown({ title, rows }: { title: string; rows: { key: string; label: string; value: number; percent: number }[] }) {
   const top = rows.slice(0, 5)
   return (
@@ -253,10 +341,12 @@ export default function Dashboard() {
   const user = useAppSelector((s) => s.auth.user)
   const moduleKeys = useAppSelector((s) => s.tenant.moduleKeys)
   const firstName = user?.firstName ?? 'there'
-  // Revenue and every figure derived from it: Super Admin and Manager only
-  // so far — Accountant's turn is still pending (see hotelier_dashboard_
-  // rollout memory). Every other role keeps the plain module list below.
-  const hasRevenueAccess = user?.role?.name === 'Super Admin' || user?.role?.name === 'Manager'
+  // Revenue and every figure derived from it: Super Admin, Manager, and
+  // Accountant — the three roles the user named as allowed to see money.
+  // Every other role still keeps the plain module list below until its own
+  // dashboard is built (see hotelier_dashboard_rollout memory).
+  const roleName = user?.role?.name
+  const revenueVariant = roleName === 'Super Admin' || roleName === 'Manager' ? 'operations' : roleName === 'Accountant' ? 'finance' : null
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -272,7 +362,7 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {hasRevenueAccess && <RevenueDashboard />}
+      {revenueVariant && <RevenueDashboard variant={revenueVariant} />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
