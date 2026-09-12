@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuBookOpen, LuBoxes, LuChefHat, LuCircleAlert, LuCircleCheck, LuClipboardList, LuClock3, LuLoaderCircle, LuLock,
-  LuLogIn, LuLogOut, LuPackage, LuReceiptText, LuShoppingBag, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuUtensils, LuWallet,
+  LuLogIn, LuLogOut, LuPackage, LuPackageCheck, LuReceiptText, LuSearch, LuShoppingBag, LuSparkles, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuUtensils, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
@@ -953,6 +953,145 @@ function ChefDashboard() {
   )
 }
 
+// ---- Housekeeping dashboard — room tasks, cleanliness, lost & found, no
+// hotel revenue. Last role in the rollout. ----
+
+type HkTaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED'
+type HkTaskType = 'CLEANING' | 'INSPECTION' | 'MAINTENANCE'
+type HkRoom = { id: string; number: string; status: RoomStatus; cleanliness: RoomCleanliness }
+type HkTask = { id: string; type: HkTaskType; status: HkTaskStatus; assignedTo: string | null; dueAt: string | null; room: HkRoom }
+type LostFoundRow = { id: string; itemNo: string; itemName: string; room: { number: string } | null; foundAt: string; status: 'UNCLAIMED' | 'COLLECTED' }
+
+function HousekeepingDashboard() {
+  const [tasks, setTasks] = useState<HkTask[]>([])
+  const [taskSummary, setTaskSummary] = useState({ pending: 0, inProgress: 0, completed: 0 })
+  const [rooms, setRooms] = useState<HkRoom[]>([])
+  const [roomSummary, setRoomSummary] = useState({ ready: 0, needsService: 0 })
+  const [lostFound, setLostFound] = useState<LostFoundRow[]>([])
+  const [unclaimedCount, setUnclaimedCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [workingId, setWorkingId] = useState('')
+
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const [taskResponse, roomResponse, lostFoundResponse] = await Promise.all([
+        api<{ tasks: HkTask[]; summary: { pending: number; inProgress: number; completed: number } }>('/housekeeping/tasks'),
+        api<{ rooms: HkRoom[]; summary: { ready: number; needsService: number } }>('/housekeeping/rooms'),
+        api<{ items: LostFoundRow[]; summary: { unclaimed: number } }>('/lost-found'),
+      ])
+      setTasks(taskResponse.tasks.filter((t) => t.status !== 'COMPLETED'))
+      setTaskSummary(taskResponse.summary)
+      setRooms(roomResponse.rooms)
+      setRoomSummary(roomResponse.summary)
+      setLostFound(lostFoundResponse.items.slice(0, 6))
+      setUnclaimedCount(lostFoundResponse.summary.unclaimed)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load the housekeeping overview')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  async function advance(task: HkTask) {
+    setWorkingId(task.id)
+    try {
+      const next = task.status === 'PENDING' ? 'IN_PROGRESS' : 'COMPLETED'
+      await api(`/housekeeping/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) })
+      void load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not update the task')
+    } finally {
+      setWorkingId('')
+    }
+  }
+
+  if (loading) {
+    return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading housekeeping…</div>
+  }
+
+  return (
+    <>
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+      <section className="mt-7">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Housekeeping right now</p>
+        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard tone="warn" label="Pending Tasks" value={String(taskSummary.pending)} icon={<LuClipboardList className="size-4" />} />
+          <StatCard index={0} label="In Progress" value={String(taskSummary.inProgress)} icon={<LuSparkles className="size-4" />} />
+          <StatCard index={1} label="Rooms Ready" value={String(roomSummary.ready)} icon={<LuBedDouble className="size-4" />} hint={`${roomSummary.needsService} need service`} />
+          <StatCard index={2} label="Lost & Found" value={String(unclaimedCount)} icon={<LuSearch className="size-4" />} hint="Unclaimed items" />
+        </div>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-sm border bg-card">
+        <header className="flex items-center justify-between border-b p-4">
+          <h2 className="flex items-center gap-2 font-semibold"><LuClipboardList className="size-4 text-secondary" /> Task Queue</h2>
+          <Link to="/housekeeping" className="text-xs font-semibold text-secondary hover:underline">All tasks →</Link>
+        </header>
+        {tasks.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">No pending tasks — all caught up.</p>
+        ) : (
+          <div className="divide-y">
+            {tasks.map((t) => (
+              <div key={t.id} className="flex items-center gap-3 p-3.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">Room {t.room.number} · {titleCase(t.type)}</p>
+                  <p className="text-xs text-muted-foreground">{t.assignedTo ? `Assigned to ${t.assignedTo}` : 'Unassigned'}{t.dueAt ? ` · Due ${new Date(t.dueAt).toLocaleDateString()}` : ''}</p>
+                </div>
+                <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', t.status === 'PENDING' ? 'bg-warning/15 text-warning' : 'bg-secondary/10 text-secondary')}>{t.status.replace('_', ' ')}</span>
+                <button
+                  disabled={workingId === t.id}
+                  onClick={() => void advance(t)}
+                  className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground disabled:opacity-60"
+                >
+                  {workingId === t.id ? <LuLoaderCircle className="size-3.5 animate-spin" /> : t.status === 'PENDING' ? 'Start' : 'Mark Done'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="border-b p-4"><h2 className="font-semibold">Room Cleanliness</h2></header>
+          <div className="grid grid-cols-3 gap-3 p-4">
+            <MiniCount label="Clean" value={rooms.filter((r) => r.cleanliness === 'CLEAN').length} cls="bg-success/10 text-success" />
+            <MiniCount label="Dirty" value={rooms.filter((r) => r.cleanliness === 'DIRTY').length} cls="bg-destructive/10 text-destructive" />
+            <MiniCount label="Inspecting" value={rooms.filter((r) => r.cleanliness === 'INSPECTING').length} cls="bg-secondary/10 text-secondary" />
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuPackageCheck className="size-4 text-secondary" /> Recent Lost &amp; Found</h2>
+            <Link to="/housekeeping/lost-and-found" className="text-xs font-semibold text-secondary hover:underline">All items →</Link>
+          </header>
+          {lostFound.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Nothing unclaimed right now.</p>
+          ) : (
+            <div className="divide-y">
+              {lostFound.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{item.itemName}</p>
+                    <p className="text-xs text-muted-foreground">{item.itemNo}{item.room ? ` · Room ${item.room.number}` : ''} · {new Date(item.foundAt).toLocaleDateString()}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-warning/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-warning">Unclaimed</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  )
+}
+
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
@@ -968,6 +1107,7 @@ export default function Dashboard() {
   const isWaiter = roleName === 'Waiter'
   const isStorekeeper = roleName === 'Storekeeper'
   const isChef = roleName === 'Chef'
+  const isHousekeeping = roleName === 'Housekeeping'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -988,6 +1128,7 @@ export default function Dashboard() {
       {isWaiter && <WaiterDashboard />}
       {isStorekeeper && <StorekeeperDashboard />}
       {isChef && <ChefDashboard />}
+      {isHousekeeping && <HousekeepingDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
