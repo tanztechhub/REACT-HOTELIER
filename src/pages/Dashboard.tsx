@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuCircleAlert, LuCircleCheck, LuClipboardList, LuLoaderCircle, LuLock,
-  LuLogIn, LuLogOut, LuReceiptText, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
+  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuBookOpen, LuBoxes, LuCircleAlert, LuCircleCheck, LuClipboardList, LuLoaderCircle, LuLock,
+  LuLogIn, LuLogOut, LuPackage, LuReceiptText, LuShoppingBag, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
@@ -627,6 +627,189 @@ function WaiterDashboard() {
   )
 }
 
+// ---- Storekeeper dashboard — stock, purchasing, and requisitions, no hotel
+// revenue. Purchase order "openValue" is money committed to suppliers, not
+// business revenue, so it's fine here the same way a Waiter's own sales
+// total was — it's operational supply-chain data, not the tenant's
+// aggregate financial picture. ----
+
+type LowStockProduct = { id: string; name: string; unit: string; totalQuantity: string; reorderLevel: string | number }
+type StockMovement = { id: string; type: string; quantity: string | number; occurredAt: string; product: { name: string; unit: string } | null; location: { name: string } | null }
+type RequisitionStatus2 = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CONVERTED' | 'CANCELLED'
+type Requisition = { id: string; requisitionNo: string; purpose: string | null; status: RequisitionStatus2; items: { id: string }[] }
+type PurchaseStatus2 = 'DRAFT' | 'ORDERED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED'
+type PurchaseOrder = { id: string; purchaseNo: string; status: PurchaseStatus2; total: string | number; supplier: { name: string } | null }
+
+const requisitionStatusCls: Record<RequisitionStatus2, string> = {
+  DRAFT: 'bg-muted text-muted-foreground',
+  SUBMITTED: 'bg-warning/15 text-warning',
+  APPROVED: 'bg-success/10 text-success',
+  REJECTED: 'bg-destructive/10 text-destructive',
+  CONVERTED: 'bg-secondary/10 text-secondary',
+  CANCELLED: 'bg-muted text-muted-foreground',
+}
+const purchaseStatusCls: Record<PurchaseStatus2, string> = {
+  DRAFT: 'bg-muted text-muted-foreground',
+  ORDERED: 'bg-warning/15 text-warning',
+  PARTIALLY_RECEIVED: 'bg-secondary/10 text-secondary',
+  RECEIVED: 'bg-success/10 text-success',
+  CANCELLED: 'bg-destructive/10 text-destructive',
+}
+
+function StorekeeperDashboard() {
+  const [lowStock, setLowStock] = useState<LowStockProduct[]>([])
+  const [productSummary, setProductSummary] = useState({ total: 0, active: 0, lowStock: 0 })
+  const [movements, setMovements] = useState<StockMovement[]>([])
+  const [requisitions, setRequisitions] = useState<Requisition[]>([])
+  const [awaitingReview, setAwaitingReview] = useState(0)
+  const [purchases, setPurchases] = useState<PurchaseOrder[]>([])
+  const [purchasesInTransit, setPurchasesInTransit] = useState(0)
+  const [openValue, setOpenValue] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [productResponse, movementResponse, requisitionResponse, purchaseResponse] = await Promise.all([
+          api<{ products: LowStockProduct[]; summary: { total: number; active: number; lowStock: number } }>('/products?lowStock=true'),
+          api<{ entries: StockMovement[] }>('/stock-ledger?pageSize=8'),
+          api<{ requisitions: Requisition[]; summary: { awaitingReview: number } }>('/purchase-requisitions'),
+          api<{ purchases: PurchaseOrder[]; summary: { byStatus: Record<PurchaseStatus2, number>; openValue: number } }>('/purchases'),
+        ])
+        if (cancelled) return
+        setLowStock(productResponse.products.slice(0, 8))
+        setProductSummary(productResponse.summary)
+        setMovements(movementResponse.entries)
+        setRequisitions(requisitionResponse.requisitions.slice(0, 6))
+        setAwaitingReview(requisitionResponse.summary.awaitingReview)
+        setPurchases(purchaseResponse.purchases.filter((p) => p.status === 'ORDERED' || p.status === 'PARTIALLY_RECEIVED').slice(0, 6))
+        setPurchasesInTransit((purchaseResponse.summary.byStatus.ORDERED ?? 0) + (purchaseResponse.summary.byStatus.PARTIALLY_RECEIVED ?? 0))
+        setOpenValue(purchaseResponse.summary.openValue)
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load the stock overview')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) {
+    return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading stock overview…</div>
+  }
+  if (error) {
+    return <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>
+  }
+
+  return (
+    <>
+      <section className="mt-7">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Stock at a glance</p>
+        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard tone="warn" label="Low Stock Items" value={String(productSummary.lowStock)} icon={<LuTriangleAlert className="size-4" />} />
+          <StatCard index={0} label="Active Products" value={String(productSummary.active)} icon={<LuPackage className="size-4" />} />
+          <StatCard index={1} label="Requisitions Awaiting Review" value={String(awaitingReview)} icon={<LuClipboardList className="size-4" />} />
+          <StatCard index={2} label="Purchase Orders In Transit" value={String(purchasesInTransit)} icon={<LuShoppingBag className="size-4" />} hint={openValue > 0 ? `${formatKes(openValue)} committed` : undefined} />
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuTriangleAlert className="size-4 text-warning" /> Low Stock</h2>
+            <Link to="/products" className="text-xs font-semibold text-secondary hover:underline">All products →</Link>
+          </header>
+          {lowStock.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Nothing below its reorder level right now.</p>
+          ) : (
+            <div className="divide-y">
+              {lowStock.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1"><p className="truncate font-medium">{p.name}</p></div>
+                  <p className="shrink-0 tabular-nums text-warning">{Number(p.totalQuantity).toLocaleString()} / {Number(p.reorderLevel).toLocaleString()} {p.unit}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuBookOpen className="size-4 text-secondary" /> Recent Stock Movements</h2>
+            <Link to="/inventory/stock-ledger" className="text-xs font-semibold text-secondary hover:underline">Full ledger →</Link>
+          </header>
+          {movements.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">No stock movements recorded yet.</p>
+          ) : (
+            <div className="divide-y">
+              {movements.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{m.product?.name ?? 'Unknown product'}</p>
+                    <p className="text-xs text-muted-foreground">{titleCase(m.type)}{m.location ? ` · ${m.location.name}` : ''} · {new Date(m.occurredAt).toLocaleDateString()}</p>
+                  </div>
+                  <p className={cn('shrink-0 tabular-nums font-semibold', Number(m.quantity) >= 0 ? 'text-success' : 'text-destructive')}>{Number(m.quantity) >= 0 ? '+' : ''}{Number(m.quantity).toLocaleString()} {m.product?.unit ?? ''}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuClipboardList className="size-4 text-secondary" /> Recent Requisitions</h2>
+            <Link to="/inventory/purchase-requisitions" className="text-xs font-semibold text-secondary hover:underline">All requisitions →</Link>
+          </header>
+          {requisitions.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">No requisitions raised yet.</p>
+          ) : (
+            <div className="divide-y">
+              {requisitions.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{r.requisitionNo}</p>
+                    <p className="truncate text-xs text-muted-foreground">{r.purpose || `${r.items.length} item${r.items.length === 1 ? '' : 's'}`}</p>
+                  </div>
+                  <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', requisitionStatusCls[r.status])}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuBoxes className="size-4 text-secondary" /> Purchase Orders In Progress</h2>
+            <Link to="/inventory/purchases" className="text-xs font-semibold text-secondary hover:underline">All purchases →</Link>
+          </header>
+          {purchases.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Nothing on order right now.</p>
+          ) : (
+            <div className="divide-y">
+              {purchases.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{p.purchaseNo}</p>
+                    <p className="truncate text-xs text-muted-foreground">{p.supplier?.name ?? 'No supplier'}</p>
+                  </div>
+                  <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', purchaseStatusCls[p.status])}>{p.status.replace('_', ' ')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  )
+}
+
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
@@ -640,6 +823,7 @@ export default function Dashboard() {
   const revenueVariant = roleName === 'Super Admin' || roleName === 'Manager' ? 'operations' : roleName === 'Accountant' ? 'finance' : null
   const isReceptionist = roleName === 'Receptionist'
   const isWaiter = roleName === 'Waiter'
+  const isStorekeeper = roleName === 'Storekeeper'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -658,6 +842,7 @@ export default function Dashboard() {
       {revenueVariant && <RevenueDashboard variant={revenueVariant} />}
       {isReceptionist && <ReceptionDashboard />}
       {isWaiter && <WaiterDashboard />}
+      {isStorekeeper && <StorekeeperDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
