@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuCircleAlert, LuClipboardList, LuLoaderCircle, LuLock,
-  LuReceiptText, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
+  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuCircleAlert, LuClipboardList, LuLoaderCircle, LuLock,
+  LuLogIn, LuLogOut, LuReceiptText, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
@@ -336,6 +336,171 @@ function MiniBreakdown({ title, rows }: { title: string; rows: { key: string; la
   )
 }
 
+// ---- Receptionist dashboard — front-desk operations, no hotel revenue.
+// Reuses GET /reception/reservations the same (unfiltered, heavy-include)
+// way Reception.tsx itself already does — this isn't a new cost, the page
+// already pays it. Arrivals/departures are computed client-side from
+// checkIn/checkOut against today's local date. ----
+
+type RoomStatus = 'VACANT' | 'OCCUPIED' | 'OUT_OF_SERVICE'
+type RoomCleanliness = 'CLEAN' | 'DIRTY' | 'INSPECTING'
+type ReceptionRoom = { id: string; number: string; status: RoomStatus; cleanliness: RoomCleanliness; roomType: { name: string } }
+type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'CHECKED_OUT' | 'CANCELLED' | 'NO_SHOW'
+type ReceptionFolio = { lineItems: { amount: string | number; quantity: number }[]; payments: { amount: string | number }[] }
+type ReceptionReservation = {
+  id: string
+  reservationNo: string
+  checkIn: string
+  checkOut: string
+  adults: number
+  children: number
+  status: ReservationStatus
+  customer: { firstName: string; lastName: string | null; phone: string | null }
+  room: { number: string }
+  folio: ReceptionFolio | null
+}
+
+const localIsoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const isSameLocalDay = (iso: string, dayIso: string) => localIsoDay(new Date(iso)) === dayIso
+const folioBalance = (folio: ReceptionFolio | null) => {
+  if (!folio) return 0
+  const charges = folio.lineItems.reduce((s, i) => s + Number(i.amount) * i.quantity, 0)
+  const paid = folio.payments.reduce((s, p) => s + Number(p.amount), 0)
+  return charges - paid
+}
+
+function ReceptionDashboard() {
+  const [reservations, setReservations] = useState<ReceptionReservation[]>([])
+  const [rooms, setRooms] = useState<ReceptionRoom[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const [reservationResponse, roomResponse] = await Promise.all([
+          api<{ reservations: ReceptionReservation[] }>('/reception/reservations'),
+          api<{ rooms: ReceptionRoom[] }>('/reception/rooms'),
+        ])
+        if (cancelled) return
+        setReservations(reservationResponse.reservations)
+        setRooms(roomResponse.rooms)
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load the front desk overview')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) {
+    return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading today's front desk…</div>
+  }
+  if (error) {
+    return <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>
+  }
+
+  const today = localIsoDay(new Date())
+  const arrivals = reservations.filter((r) => isSameLocalDay(r.checkIn, today) && (r.status === 'PENDING' || r.status === 'CONFIRMED'))
+  const departures = reservations.filter((r) => isSameLocalDay(r.checkOut, today) && r.status === 'CHECKED_IN')
+  const inHouse = reservations.filter((r) => r.status === 'CHECKED_IN')
+  const roomsReady = rooms.filter((r) => r.status === 'VACANT' && r.cleanliness === 'CLEAN')
+  const guestName = (c: ReceptionReservation['customer']) => `${c.firstName} ${c.lastName ?? ''}`.trim()
+
+  return (
+    <>
+      <section className="mt-7">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Today's front desk</p>
+        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard index={0} label="Arrivals Today" value={String(arrivals.length)} icon={<LuLogIn className="size-4" />} hint="Expected, not yet checked in" />
+          <StatCard index={1} label="Departures Today" value={String(departures.length)} icon={<LuLogOut className="size-4" />} hint="Checked in, due out today" />
+          <StatCard index={2} label="In-House Now" value={String(inHouse.length)} icon={<LuUsers className="size-4" />} hint="Currently checked in" />
+          <StatCard index={3} label="Rooms Ready" value={`${roomsReady.length} / ${rooms.length}`} icon={<LuBedDouble className="size-4" />} hint="Vacant and clean" />
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Room status</p>
+        <div className="mt-2.5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <MiniCount label="Vacant" value={rooms.filter((r) => r.status === 'VACANT').length} cls="bg-success/10 text-success" />
+          <MiniCount label="Occupied" value={rooms.filter((r) => r.status === 'OCCUPIED').length} cls="bg-warning/15 text-warning" />
+          <MiniCount label="Out of Service" value={rooms.filter((r) => r.status === 'OUT_OF_SERVICE').length} cls="bg-destructive/10 text-destructive" />
+          <MiniCount label="Clean" value={rooms.filter((r) => r.cleanliness === 'CLEAN').length} cls="bg-success/10 text-success" />
+          <MiniCount label="Dirty" value={rooms.filter((r) => r.cleanliness === 'DIRTY').length} cls="bg-destructive/10 text-destructive" />
+          <MiniCount label="Inspecting" value={rooms.filter((r) => r.cleanliness === 'INSPECTING').length} cls="bg-secondary/10 text-secondary" />
+        </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuLogIn className="size-4 text-secondary" /> Arrivals Today</h2>
+            <Link to="/reservations" className="text-xs font-semibold text-secondary hover:underline">Check In →</Link>
+          </header>
+          {arrivals.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">No arrivals expected today.</p>
+          ) : (
+            <div className="divide-y">
+              {arrivals.map((r) => (
+                <div key={r.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{guestName(r.customer)}</p>
+                    <p className="text-xs text-muted-foreground">{r.reservationNo} · Room {r.room.number} · {r.adults + r.children} guest{r.adults + r.children === 1 ? '' : 's'}</p>
+                  </div>
+                  <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', r.status === 'CONFIRMED' ? 'bg-secondary/10 text-secondary' : 'bg-warning/15 text-warning')}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuLogOut className="size-4 text-secondary" /> Departures Today</h2>
+            <Link to="/reception/stays" className="text-xs font-semibold text-secondary hover:underline">Guest Stays →</Link>
+          </header>
+          {departures.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">No departures due today.</p>
+          ) : (
+            <div className="divide-y">
+              {departures.map((r) => {
+                const balance = folioBalance(r.folio)
+                return (
+                  <div key={r.id} className="flex items-center gap-3 p-3.5 text-sm">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{guestName(r.customer)}</p>
+                      <p className="text-xs text-muted-foreground">{r.reservationNo} · Room {r.room.number}</p>
+                    </div>
+                    {balance > 0.01 ? (
+                      <span className="shrink-0 rounded-full bg-destructive/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-destructive">Balance due</span>
+                    ) : (
+                      <span className="shrink-0 rounded-full bg-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-success">Settled</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  )
+}
+
+function MiniCount({ label, value, cls }: { label: string; value: number; cls: string }) {
+  return (
+    <div className={cn('rounded-sm p-3 text-center', cls)}>
+      <p className="text-xl font-semibold tabular-nums">{value}</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide">{label}</p>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
@@ -347,6 +512,7 @@ export default function Dashboard() {
   // dashboard is built (see hotelier_dashboard_rollout memory).
   const roleName = user?.role?.name
   const revenueVariant = roleName === 'Super Admin' || roleName === 'Manager' ? 'operations' : roleName === 'Accountant' ? 'finance' : null
+  const isReceptionist = roleName === 'Receptionist'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -363,6 +529,7 @@ export default function Dashboard() {
       </header>
 
       {revenueVariant && <RevenueDashboard variant={revenueVariant} />}
+      {isReceptionist && <ReceptionDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
