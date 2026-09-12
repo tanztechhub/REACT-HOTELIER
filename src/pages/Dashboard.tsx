@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuBookOpen, LuBoxes, LuCircleAlert, LuCircleCheck, LuClipboardList, LuLoaderCircle, LuLock,
-  LuLogIn, LuLogOut, LuPackage, LuReceiptText, LuShoppingBag, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
+  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuBookOpen, LuBoxes, LuChefHat, LuCircleAlert, LuCircleCheck, LuClipboardList, LuClock3, LuLoaderCircle, LuLock,
+  LuLogIn, LuLogOut, LuPackage, LuReceiptText, LuShoppingBag, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuUtensils, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
@@ -810,6 +810,149 @@ function StorekeeperDashboard() {
   )
 }
 
+// ---- Chef dashboard — kitchen tickets, menu, recipes, low-stock
+// ingredients, no hotel revenue. Reuses GET /kitchen/orders exactly the way
+// Kitchen.tsx itself does (OPEN/PREPARING only, oldest first) and its
+// start/ready actions, so the dashboard can act on a ticket directly. ----
+
+type KitchenOrderItem = { id: string; quantity: number; menuItem: { name: string } | null; variant: { name: string } | null }
+type KitchenOrder = { id: string; orderNumber: number; status: 'OPEN' | 'PREPARING'; createdAt: string; table: { label: string } | null; items: KitchenOrderItem[] }
+type KitchenMenuItem = { id: string; recipe: { id: string } | null }
+
+const elapsedMinutes = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
+
+function ChefDashboard() {
+  const [orders, setOrders] = useState<KitchenOrder[]>([])
+  const [menuItems, setMenuItems] = useState<KitchenMenuItem[]>([])
+  const [lowStock, setLowStock] = useState<LowStockProduct[]>([])
+  const [lowStockCount, setLowStockCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [workingId, setWorkingId] = useState('')
+
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const [orderResponse, menuResponse, productResponse] = await Promise.all([
+        api<{ orders: KitchenOrder[] }>('/kitchen/orders'),
+        api<{ items: KitchenMenuItem[] }>('/kitchen/menu-items'),
+        api<{ products: LowStockProduct[]; summary: { lowStock: number } }>('/products?lowStock=true'),
+      ])
+      setOrders(orderResponse.orders)
+      setMenuItems(menuResponse.items)
+      setLowStock(productResponse.products.slice(0, 8))
+      setLowStockCount(productResponse.summary.lowStock)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load the kitchen overview')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  async function advance(order: KitchenOrder) {
+    setWorkingId(order.id)
+    try {
+      await api(`/kitchen/orders/${order.id}/${order.status === 'OPEN' ? 'start' : 'ready'}`, { method: 'PATCH' })
+      void load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not update the ticket')
+    } finally {
+      setWorkingId('')
+    }
+  }
+
+  if (loading) {
+    return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading the kitchen…</div>
+  }
+
+  const newTickets = orders.filter((o) => o.status === 'OPEN')
+  const inProgress = orders.filter((o) => o.status === 'PREPARING')
+  const oldest = orders[0]
+  const withRecipe = menuItems.filter((m) => m.recipe).length
+
+  return (
+    <>
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+      <section className="mt-7">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Kitchen right now</p>
+        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard index={0} label="New Tickets" value={String(newTickets.length)} icon={<LuClipboardList className="size-4" />} />
+          <StatCard index={1} label="In Progress" value={String(inProgress.length)} icon={<LuChefHat className="size-4" />} />
+          <StatCard tone={oldest && elapsedMinutes(oldest.createdAt) > 15 ? 'warn' : 'info'} label="Oldest Ticket" value={oldest ? `${elapsedMinutes(oldest.createdAt)} min` : '—'} icon={<LuClock3 className="size-4" />} />
+          <StatCard tone="warn" label="Low Stock Ingredients" value={String(lowStockCount)} icon={<LuTriangleAlert className="size-4" />} />
+        </div>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-sm border bg-card">
+        <header className="flex items-center justify-between border-b p-4">
+          <h2 className="flex items-center gap-2 font-semibold"><LuChefHat className="size-4 text-secondary" /> Ticket Queue</h2>
+          <Link to="/kitchen" className="text-xs font-semibold text-secondary hover:underline">Open Kitchen →</Link>
+        </header>
+        {orders.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">No tickets waiting — kitchen is clear.</p>
+        ) : (
+          <div className="divide-y">
+            {orders.map((o) => (
+              <div key={o.id} className="flex items-center gap-3 p-3.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">Order #{o.orderNumber} · {o.table?.label ?? 'Takeaway'}</p>
+                  <p className="truncate text-xs text-muted-foreground">{o.items.map((i) => `${i.quantity}× ${i.menuItem?.name ?? 'item'}${i.variant ? ` (${i.variant.name})` : ''}`).join(' · ')}</p>
+                </div>
+                <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', o.status === 'OPEN' ? 'bg-warning/15 text-warning' : 'bg-secondary/10 text-secondary')}>{elapsedMinutes(o.createdAt)} min</span>
+                <button
+                  disabled={workingId === o.id}
+                  onClick={() => void advance(o)}
+                  className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground disabled:opacity-60"
+                >
+                  {workingId === o.id ? <LuLoaderCircle className="size-3.5 animate-spin" /> : o.status === 'OPEN' ? 'Start' : 'Mark Ready'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+        <div className="overflow-hidden rounded-sm border bg-card">
+          <header className="flex items-center justify-between border-b p-4">
+            <h2 className="flex items-center gap-2 font-semibold"><LuTriangleAlert className="size-4 text-warning" /> Low Stock Ingredients</h2>
+            <Link to="/products" className="text-xs font-semibold text-secondary hover:underline">All products →</Link>
+          </header>
+          {lowStock.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Nothing below its reorder level right now.</p>
+          ) : (
+            <div className="divide-y">
+              {lowStock.map((p) => (
+                <div key={p.id} className="flex items-center gap-3 p-3.5 text-sm">
+                  <div className="min-w-0 flex-1"><p className="truncate font-medium">{p.name}</p></div>
+                  <p className="shrink-0 tabular-nums text-warning">{Number(p.totalQuantity).toLocaleString()} / {Number(p.reorderLevel).toLocaleString()} {p.unit}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="overflow-hidden rounded-sm border bg-card p-4">
+          <h2 className="flex items-center gap-2 font-semibold"><LuUtensils className="size-4 text-secondary" /> Menu</h2>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <Link to="/menu/items" className="rounded-sm border p-3 text-center hover:bg-muted/40">
+              <p className="text-xl font-semibold tabular-nums">{menuItems.length}</p>
+              <p className="text-xs text-muted-foreground">Active Menu Items</p>
+            </Link>
+            <Link to="/kitchen/recipes" className="rounded-sm border p-3 text-center hover:bg-muted/40">
+              <p className="text-xl font-semibold tabular-nums">{withRecipe}</p>
+              <p className="text-xs text-muted-foreground">With a Recipe</p>
+            </Link>
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}
+
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
@@ -824,6 +967,7 @@ export default function Dashboard() {
   const isReceptionist = roleName === 'Receptionist'
   const isWaiter = roleName === 'Waiter'
   const isStorekeeper = roleName === 'Storekeeper'
+  const isChef = roleName === 'Chef'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -843,6 +987,7 @@ export default function Dashboard() {
       {isReceptionist && <ReceptionDashboard />}
       {isWaiter && <WaiterDashboard />}
       {isStorekeeper && <StorekeeperDashboard />}
+      {isChef && <ChefDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
