@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LuChevronLeft, LuChevronRight, LuCircleAlert, LuLoaderCircle } from 'react-icons/lu'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LuChevronLeft, LuChevronRight, LuCircleAlert, LuLoaderCircle, LuX } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
@@ -8,20 +8,41 @@ type Employee = { id: string; firstName: string; lastName: string; jobTitle: str
 type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'ON_LEAVE'
 type AttendanceRecord = { employeeId: string; date: string; status: AttendanceStatus; notes: string | null }
 
-// Cycling order a click steps through: blank -> Present -> Absent -> Late -> On leave -> blank.
-const CYCLE: (AttendanceStatus | null)[] = [null, 'PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']
+const STATUS_ORDER: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']
 const STATUS_STYLE: Record<AttendanceStatus, string> = {
   PRESENT: 'bg-success/15 text-success',
   ABSENT: 'bg-destructive/15 text-destructive',
   LATE: 'bg-warning/15 text-warning',
   ON_LEAVE: 'bg-secondary/15 text-secondary',
 }
+const STATUS_DOT: Record<AttendanceStatus, string> = {
+  PRESENT: 'bg-success',
+  ABSENT: 'bg-destructive',
+  LATE: 'bg-warning',
+  ON_LEAVE: 'bg-secondary',
+}
 const STATUS_LETTER: Record<AttendanceStatus, string> = { PRESENT: 'P', ABSENT: 'A', LATE: 'L', ON_LEAVE: 'O' }
+const STATUS_LABEL: Record<AttendanceStatus, string> = { PRESENT: 'Present', ABSENT: 'Absent', LATE: 'Late', ON_LEAVE: 'On leave' }
 
+// "YYYY-MM-DD" -> day-of-month, cheaply, without a Date/timezone round trip.
 function monthKey(date: string): string {
-  // "YYYY-MM-DD" -> day-of-month, cheaply, without a Date/timezone round trip.
   return date.slice(8, 10)
 }
+
+// Monday-first calendar grid for a given month: null cells pad the first
+// week (before day 1) and the last week (after the month's final day) so
+// every row is a full 7-day week, like a real calendar.
+function calendarWeeks(year: number, month: number): (number | null)[][] {
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const firstWeekday = (new Date(year, month - 1, 1).getDay() + 6) % 7 // 0=Mon..6=Sun
+  const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
+  while (cells.length % 7 !== 0) cells.push(null)
+  const weeks: (number | null)[][] = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+  return weeks
+}
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 export default function Attendance() {
   const toast = useToast()
@@ -32,10 +53,10 @@ export default function Attendance() {
   const [records, setRecords] = useState<Map<string, AttendanceRecord>>(new Map())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [saving, setSaving] = useState<string | null>(null)
+  const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [openKey, setOpenKey] = useState<string | null>(null)
 
-  const daysInMonth = useMemo(() => new Date(year, month, 0).getDate(), [year, month])
-  const days = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => i + 1), [daysInMonth])
+  const weeks = useMemo(() => calendarWeeks(year, month), [year, month])
   const monthLabel = useMemo(() => new Date(year, month - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }), [year, month])
 
   const load = useCallback(async () => {
@@ -63,34 +84,34 @@ export default function Attendance() {
     const next = new Date(year, month - 1 + delta, 1)
     setYear(next.getFullYear())
     setMonth(next.getMonth() + 1)
+    setOpenKey(null)
   }
 
-  async function cycleCell(employeeId: string, day: number) {
+  async function setStatus(employeeId: string, day: number, status: AttendanceStatus | null) {
     const key = `${employeeId}|${String(day).padStart(2, '0')}`
-    const current = records.get(key)?.status ?? null
-    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length]
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-    setSaving(key)
+    setOpenKey(null)
+    setSavingKey(key)
     try {
-      if (next) {
-        await api<{ record: AttendanceRecord }>('/attendance/mark', { method: 'PUT', body: JSON.stringify({ employeeId, date: dateStr, status: next }) })
+      if (status) {
+        await api<{ record: AttendanceRecord }>('/attendance/mark', { method: 'PUT', body: JSON.stringify({ employeeId, date: dateStr, status }) })
       } else {
         await api(`/attendance/${employeeId}/${dateStr}`, { method: 'DELETE' })
       }
       setRecords((prev) => {
         const copy = new Map(prev)
-        if (next) copy.set(key, { employeeId, date: dateStr, status: next, notes: null })
+        if (status) copy.set(key, { employeeId, date: dateStr, status, notes: null })
         else copy.delete(key)
         return copy
       })
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : 'Could not update attendance')
     } finally {
-      setSaving(null)
+      setSavingKey(null)
     }
   }
 
-  const summary = useMemo(() => {
+  const summaryFor = useMemo(() => {
     const counts = new Map<string, Record<AttendanceStatus, number>>()
     for (const rec of records.values()) {
       const row = counts.get(rec.employeeId) ?? { PRESENT: 0, ABSENT: 0, LATE: 0, ON_LEAVE: 0 }
@@ -101,12 +122,12 @@ export default function Attendance() {
   }, [records])
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 lg:px-10">
+    <div className="mx-auto max-w-3xl px-6 py-8 sm:px-8 lg:px-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-secondary">Team</p>
           <h1 className="mt-1 font-display text-3xl font-semibold">Attendance</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Marked by hand, one day at a time — click a cell to cycle Present → Absent → Late → On leave → blank. Any past month is one click away.</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Click a day to choose Present, Absent, Late, or On leave for that person — any past month is one click away.</p>
         </div>
         <div className="flex items-center gap-2 rounded-sm border bg-card px-2 py-1.5 shadow-sm">
           <button onClick={() => shiftMonth(-1)} aria-label="Previous month" className="rounded-sm p-1.5 hover:bg-muted"><LuChevronLeft className="size-4" /></button>
@@ -123,65 +144,159 @@ export default function Attendance() {
       )}
 
       <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        {(Object.keys(STATUS_LETTER) as AttendanceStatus[]).map((s) => (
+        {STATUS_ORDER.map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
-            <span className={cn('flex size-5 items-center justify-center rounded-sm text-[10px] font-bold', STATUS_STYLE[s])}>{STATUS_LETTER[s]}</span>
-            {s === 'ON_LEAVE' ? 'On leave' : s.charAt(0) + s.slice(1).toLowerCase()}
+            <span className={cn('size-2.5 rounded-full', STATUS_DOT[s])} />
+            {STATUS_LABEL[s]}
           </span>
         ))}
       </div>
 
-      <section className="mt-4 overflow-hidden rounded-lg border bg-card shadow-sm">
-        {loading ? (
-          <div className="flex min-h-64 items-center justify-center gap-2 p-8 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading attendance…</div>
-        ) : employees.length === 0 ? (
-          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">No active employees yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead className="bg-primary text-primary-foreground">
-                <tr>
-                  <th className="sticky left-0 z-10 bg-primary px-3 py-2 font-semibold">Employee</th>
-                  {days.map((d) => <th key={d} className="w-8 px-0.5 py-2 text-center font-semibold">{d}</th>)}
-                  <th className="px-2 py-2 text-center font-semibold">P</th>
-                  <th className="px-2 py-2 text-center font-semibold">A</th>
-                </tr>
-              </thead>
-              <tbody className="[&>tr]:border-b [&>tr:last-child]:border-0">
-                {employees.map((emp) => {
-                  const row = summary.get(emp.id)
-                  return (
-                    <tr key={emp.id} className="align-middle">
-                      <td className="sticky left-0 z-10 whitespace-nowrap bg-card px-3 py-1.5 font-semibold">{emp.firstName} {emp.lastName}</td>
-                      {days.map((d) => {
-                        const key = `${emp.id}|${String(d).padStart(2, '0')}`
-                        const status = records.get(key)?.status
-                        const isSaving = saving === key
-                        return (
-                          <td key={d} className="p-0.5 text-center">
-                            <button
-                              onClick={() => void cycleCell(emp.id, d)}
-                              disabled={isSaving}
-                              className={cn(
-                                'flex size-6 items-center justify-center rounded-sm text-[10px] font-bold transition-colors hover:opacity-80 disabled:opacity-50',
-                                status ? STATUS_STYLE[status] : 'bg-muted/50 text-transparent hover:bg-muted',
-                              )}
-                            >
-                              {isSaving ? <LuLoaderCircle className="size-3 animate-spin text-muted-foreground" /> : (status ? STATUS_LETTER[status] : '·')}
-                            </button>
-                          </td>
-                        )
-                      })}
-                      <td className="px-2 py-1.5 text-center tabular-nums text-success">{row?.PRESENT ?? 0}</td>
-                      <td className="px-2 py-1.5 text-center tabular-nums text-destructive">{row?.ABSENT ?? 0}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+      {loading ? (
+        <div className="mt-6 flex min-h-64 items-center justify-center gap-2 rounded-lg border bg-card p-8 text-sm text-muted-foreground shadow-sm"><LuLoaderCircle className="animate-spin" /> Loading attendance…</div>
+      ) : employees.length === 0 ? (
+        <div className="mt-6 min-h-64 rounded-lg border bg-card p-16 text-center text-sm text-muted-foreground shadow-sm">No active employees yet.</div>
+      ) : (
+        <div className="mt-6 space-y-6">
+          {employees.map((emp) => (
+            <EmployeeCalendar
+              key={emp.id}
+              employee={emp}
+              weeks={weeks}
+              records={records}
+              summary={summaryFor.get(emp.id)}
+              savingKey={savingKey}
+              openKey={openKey}
+              setOpenKey={setOpenKey}
+              onSetStatus={setStatus}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmployeeCalendar({
+  employee, weeks, records, summary, savingKey, openKey, setOpenKey, onSetStatus,
+}: {
+  employee: Employee
+  weeks: (number | null)[][]
+  records: Map<string, AttendanceRecord>
+  summary: Record<AttendanceStatus, number> | undefined
+  savingKey: string | null
+  openKey: string | null
+  setOpenKey: (key: string | null) => void
+  onSetStatus: (employeeId: string, day: number, status: AttendanceStatus | null) => void
+}) {
+  return (
+    <section className="rounded-lg border bg-card p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="font-display text-lg font-semibold">{employee.firstName} {employee.lastName}</h2>
+        <p className="text-xs text-muted-foreground">{employee.jobTitle}</p>
+        <p className="flex gap-3 text-xs font-semibold tabular-nums">
+          <span className="text-success">{summary?.PRESENT ?? 0} present</span>
+          <span className="text-destructive">{summary?.ABSENT ?? 0} absent</span>
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-7 gap-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {WEEKDAY_LABELS.map((label) => <div key={label}>{label}</div>)}
+      </div>
+
+      <div className="mt-1.5 space-y-1.5">
+        {weeks.map((week, i) => (
+          <div key={i} className="grid grid-cols-7 gap-1.5">
+            {week.map((day, j) => (
+              day === null
+                ? <div key={j} />
+                : (
+                  <DayCell
+                    key={j}
+                    employee={employee}
+                    day={day}
+                    record={records.get(`${employee.id}|${String(day).padStart(2, '0')}`)}
+                    isSaving={savingKey === `${employee.id}|${String(day).padStart(2, '0')}`}
+                    isOpen={openKey === `${employee.id}|${String(day).padStart(2, '0')}`}
+                    setOpenKey={setOpenKey}
+                    onSetStatus={onSetStatus}
+                  />
+                )
+            ))}
           </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function DayCell({
+  employee, day, record, isSaving, isOpen, setOpenKey, onSetStatus,
+}: {
+  employee: Employee
+  day: number
+  record: AttendanceRecord | undefined
+  isSaving: boolean
+  isOpen: boolean
+  setOpenKey: (key: string | null) => void
+  onSetStatus: (employeeId: string, day: number, status: AttendanceStatus | null) => void
+}) {
+  const key = `${employee.id}|${String(day).padStart(2, '0')}`
+  const ref = useRef<HTMLDivElement>(null)
+  const status = record?.status
+
+  useEffect(() => {
+    if (!isOpen) return
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpenKey(null)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [isOpen, setOpenKey])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpenKey(isOpen ? null : key)}
+        disabled={isSaving}
+        className={cn(
+          'flex aspect-square w-full flex-col items-center justify-center gap-0.5 rounded-md border text-sm font-bold transition-colors disabled:opacity-50',
+          status ? cn(STATUS_STYLE[status], 'border-transparent') : 'border-border text-foreground hover:bg-muted',
         )}
-      </section>
+      >
+        {isSaving ? (
+          <LuLoaderCircle className="size-4 animate-spin" />
+        ) : (
+          <>
+            <span className="text-[11px] font-semibold leading-none opacity-70">{day}</span>
+            <span className="text-sm leading-none">{status ? STATUS_LETTER[status] : ''}</span>
+          </>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-1/2 top-full z-20 mt-1.5 w-40 -translate-x-1/2 overflow-hidden rounded-sm border bg-card shadow-lg">
+          {STATUS_ORDER.map((s) => (
+            <button
+              key={s}
+              onClick={() => onSetStatus(employee.id, day, s)}
+              className={cn('flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted', status === s && 'bg-muted/60 font-semibold')}
+            >
+              <span className={cn('size-2.5 shrink-0 rounded-full', STATUS_DOT[s])} />
+              {STATUS_LABEL[s]}
+            </button>
+          ))}
+          {status && (
+            <button
+              onClick={() => onSetStatus(employee.id, day, null)}
+              className="flex w-full items-center gap-2 border-t px-3 py-2 text-left text-sm text-muted-foreground hover:bg-muted"
+            >
+              <LuX className="size-3.5 shrink-0" /> Clear
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
