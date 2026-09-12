@@ -1,48 +1,256 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LuArrowRight, LuCircleAlert, LuCircleCheck, LuLoaderCircle, LuSearch, LuTrash2, LuTruck, LuWarehouse } from 'react-icons/lu'
-import { api } from '@/lib/api'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { LuArrowRight, LuBoxes, LuCircleAlert, LuEye, LuLoaderCircle, LuPackage, LuPrinter, LuSearch, LuTrash2, LuTruck, LuWarehouse } from 'react-icons/lu'
+import { api, hasApiTenant } from '@/lib/api'
+import Button from '@/components/ui/Button'
+import StatCard from '@/components/ui/StatCard'
 import { useToast } from '@/components/ui/Toast'
-import { cn } from '@/lib/utils'
+import type { DocProfile } from '@/components/documents/pdf'
+
+const DocumentViewer = lazy(() => import('@/components/documents/DocumentViewer'))
 
 type Location = { id: string; name: string; type: string | null }
+type Employee = { id: string; firstName: string; lastName: string }
 type StockByLocation = { locationId: string; locationName: string; quantity: string }
-type Product = { id: string; name: string; unit: string; stockByLocation: StockByLocation[] }
-type BatchItem = { productId: string; name: string; unit: string; quantity: string; maxAvailable: number }
+type Product = { id: string; name: string; unit: string; sku: string | null; stockByLocation: StockByLocation[] }
+type TransferItem = {
+  id: string
+  quantity: string
+  fromQtyBefore: string
+  fromQtyAfter: string
+  toQtyBefore: string
+  toQtyAfter: string
+  product: { id: string; name: string; unit: string; sku: string | null }
+}
+type StockTransfer = {
+  id: string
+  transferNo: string
+  note: string | null
+  createdAt: string
+  fromLocation: { id: string; name: string }
+  toLocation: { id: string; name: string }
+  createdByEmployee: Employee | null
+  items: TransferItem[]
+}
+type Summary = { total: number; lineItems: number; unitsTransferred: number }
+
+function SetupMessage() {
+  return <div className="mx-auto max-w-7xl px-6 py-16 text-center"><p className="text-sm text-muted-foreground">Workspace not resolved yet.</p></div>
+}
 
 export default function InventoryWorkspace() {
   const toast = useToast()
-  const [products, setProducts] = useState<Product[]>([])
+  const [transfers, setTransfers] = useState<StockTransfer[]>([])
+  const [summary, setSummary] = useState<Summary>({ total: 0, lineItems: 0, unitsTransferred: 0 })
   const [locations, setLocations] = useState<Location[]>([])
-  const [fromLocationId, setFromLocationId] = useState('')
-  const [toLocationId, setToLocationId] = useState('')
   const [search, setSearch] = useState('')
-  const [batch, setBatch] = useState<BatchItem[]>([])
+  const [locationFilter, setLocationFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [sending, setSending] = useState(false)
+  const [showDistribute, setShowDistribute] = useState(false)
+  const [detail, setDetail] = useState<StockTransfer | null>(null)
+  const [profile, setProfile] = useState<DocProfile>(null)
+  const [printing, setPrinting] = useState<StockTransfer | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const [productsRes, locationsRes] = await Promise.all([
-        api<{ products: Product[] }>('/products'),
-        api<{ locations: Location[] }>('/locations'),
-      ])
-      setProducts(productsRes.products)
-      setLocations(locationsRes.locations)
-      setFromLocationId((current) => current || locationsRes.locations.find((l) => l.type === 'STORE')?.id || '')
+      const query = new URLSearchParams()
+      if (search.trim()) query.set('search', search.trim())
+      if (locationFilter) query.set('locationId', locationFilter)
+      const response = await api<{ transfers: StockTransfer[]; summary: Summary }>(`/stock-transfers${query.size ? `?${query}` : ''}`)
+      setTransfers(response.transfers)
+      setSummary(response.summary)
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not load distribution data'
+      const message = cause instanceof Error ? cause.message : 'Could not load stock transfers'
       setError(message)
       toast.error(message)
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [search, locationFilter, toast])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { const t = window.setTimeout(() => void load(), 250); return () => window.clearTimeout(t) }, [load])
+  useEffect(() => {
+    api<{ locations: Location[] }>('/locations').then((r) => setLocations(r.locations)).catch(() => {})
+    api<{ profile: DocProfile }>('/business-profile').then((r) => setProfile(r.profile)).catch(() => {})
+  }, [])
+
+  if (!hasApiTenant()) return <SetupMessage />
+
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-secondary">Inventory</p>
+          <h1 className="mt-1 flex items-center gap-2 font-display text-3xl font-semibold"><LuWarehouse className="text-secondary" /> Store</h1>
+          <p className="mt-2 max-w-xl text-sm text-muted-foreground">Move stock between locations — every transfer is recorded as a printable receipt, with stock frozen at that exact moment.</p>
+        </div>
+        <Button onClick={() => setShowDistribute(true)}>
+          <LuTruck /> Distribute
+        </Button>
+      </header>
+
+      <section className="mt-7 grid gap-3 sm:grid-cols-3">
+        <StatCard index={0} label="Total transfers" value={summary.total} icon={<LuBoxes />} />
+        <StatCard index={1} label="Line items" value={summary.lineItems} icon={<LuPackage />} />
+        <StatCard index={2} label="Units transferred" value={summary.unitsTransferred.toLocaleString()} icon={<LuTruck />} />
+      </section>
+
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+      <section className="mt-6 overflow-hidden rounded-sm border bg-card shadow-sm">
+        <div className="flex flex-col gap-3 border-b p-4 sm:flex-row sm:items-center">
+          <label className="relative flex-1">
+            <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search transfer #, destination or source…" className="w-full rounded-sm border bg-background py-2.5 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
+          </label>
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)} className="rounded-sm border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-ring">
+            <option value="">All locations</option>
+            {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </div>
+
+        {loading ? (
+          <div className="flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading transfers…</div>
+        ) : transfers.length === 0 ? (
+          <div className="min-h-64 p-16 text-center text-sm text-muted-foreground">No stock transfers yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3">Transfer</th>
+                  <th className="px-5 py-3">Route</th>
+                  <th className="px-5 py-3">Items</th>
+                  <th className="px-5 py-3">By</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t) => {
+                  const units = t.items.reduce((s, i) => s + Number(i.quantity), 0)
+                  return (
+                    <tr key={t.id} className="border-t transition hover:bg-muted/30">
+                      <td className="px-5 py-4">
+                        <button onClick={() => setDetail(t)} className="font-semibold text-secondary hover:underline">{t.transferNo}</button>
+                        <p className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString()}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <span className="rounded-sm border px-2 py-0.5 font-medium">{t.fromLocation.name}</span>
+                          <LuArrowRight className="size-3 text-muted-foreground" />
+                          <span className="rounded-sm border border-secondary/40 bg-secondary/5 px-2 py-0.5 font-medium text-secondary">{t.toLocation.name}</span>
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-muted-foreground">{t.items.length} item{t.items.length === 1 ? '' : 's'} · {units.toLocaleString()} unit{units === 1 ? '' : 's'}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{t.createdByEmployee ? `${t.createdByEmployee.firstName} ${t.createdByEmployee.lastName}` : '—'}</td>
+                      <td className="px-5 py-4 text-right">
+                        <button onClick={() => setDetail(t)} title="View" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuEye className="size-4" /></button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {showDistribute && (
+        <DistributeModal
+          locations={locations}
+          onClose={() => setShowDistribute(false)}
+          onRecorded={() => {
+            setShowDistribute(false)
+            toast.success('Stock distributed.')
+            void load()
+          }}
+        />
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) setDetail(null) }}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+            <p className="text-sm font-semibold text-secondary">Stock transfer</p>
+            <h2 className="mt-1 font-display text-2xl font-semibold">{detail.transferNo}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Frozen at the moment of transfer — reflects exactly what was true then, even if stock has moved since.</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-sm border px-2 py-0.5 font-medium">{detail.fromLocation.name}</span>
+              <LuArrowRight className="size-3 text-muted-foreground" />
+              <span className="rounded-sm border border-secondary/40 bg-secondary/5 px-2 py-0.5 font-medium text-secondary">{detail.toLocation.name}</span>
+              <span className="text-muted-foreground">
+                {detail.createdByEmployee ? `${detail.createdByEmployee.firstName} ${detail.createdByEmployee.lastName} · ` : ''}
+                {new Date(detail.createdAt).toLocaleString()}
+              </span>
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-sm border">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Product</th>
+                    <th className="px-4 py-2 text-right">Qty</th>
+                    <th className="px-4 py-2 text-right">{detail.fromLocation.name} before</th>
+                    <th className="px-4 py-2 text-right">{detail.fromLocation.name} after</th>
+                    <th className="px-4 py-2 text-right">{detail.toLocation.name} before</th>
+                    <th className="px-4 py-2 text-right">{detail.toLocation.name} after</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.items.map((i) => (
+                    <tr key={i.id} className="border-t">
+                      <td className="px-4 py-2">
+                        <p className="font-medium">{i.product.name}</p>
+                        {i.product.sku && <p className="text-xs text-muted-foreground">{i.product.sku}</p>}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold">{Number(i.quantity).toLocaleString()} {i.product.unit}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{Number(i.fromQtyBefore).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{Number(i.fromQtyAfter).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">{Number(i.toQtyBefore).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{Number(i.toQtyAfter).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {detail.note && <p className="mt-4 rounded-sm bg-muted/50 p-3 text-sm text-muted-foreground">{detail.note}</p>}
+
+            <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+              <button onClick={() => setPrinting(detail)} className="inline-flex items-center gap-1.5 rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted"><LuPrinter className="size-4" /> Print</button>
+              <button onClick={() => setDetail(null)} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {printing && (
+        <Suspense fallback={<div className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-800/95 text-white"><LuLoaderCircle className="size-6 animate-spin" /></div>}>
+          <DocumentViewer kind="stock-transfer" data={printing} profile={profile} onClose={() => setPrinting(null)} />
+        </Suspense>
+      )}
+    </div>
+  )
+}
+
+type BatchItem = { productId: string; name: string; unit: string; quantity: string; maxAvailable: number }
+
+function DistributeModal({ locations, onClose, onRecorded }: { locations: Location[]; onClose: () => void; onRecorded: () => void }) {
+  const toast = useToast()
+  const [products, setProducts] = useState<Product[]>([])
+  const [fromLocationId, setFromLocationId] = useState(() => locations.find((l) => l.type === 'STORE')?.id ?? '')
+  const [toLocationId, setToLocationId] = useState('')
+  const [search, setSearch] = useState('')
+  const [batch, setBatch] = useState<BatchItem[]>([])
+  const [note, setNote] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ products: Product[] }>('/products').then((r) => setProducts(r.products)).catch(() => {}).finally(() => setLoading(false))
+  }, [])
 
   const availableAt = useMemo(() => {
     return (product: Product) => Number(product.stockByLocation.find((s) => s.locationId === fromLocationId)?.quantity ?? 0)
@@ -55,7 +263,7 @@ export default function InventoryWorkspace() {
       const existing = current.find((b) => b.productId === product.id)
       if (!quantity || Number(quantity) <= 0) return current.filter((b) => b.productId !== product.id)
       const item: BatchItem = { productId: product.id, name: product.name, unit: product.unit, quantity, maxAvailable: availableAt(product) }
-      return existing ? current.map((b) => b.productId === product.id ? item : b) : [...current, item]
+      return existing ? current.map((b) => (b.productId === product.id ? item : b)) : [...current, item]
     })
   }
 
@@ -63,91 +271,84 @@ export default function InventoryWorkspace() {
     setBatch((current) => current.filter((b) => b.productId !== productId))
   }
 
-  async function sendDistribution() {
+  async function record() {
     if (!fromLocationId || !toLocationId || batch.length === 0) return
-    setSending(true)
+    setSaving(true)
     setError('')
     try {
-      await api('/products/distribute', {
+      await api('/stock-transfers', {
         method: 'POST',
-        body: JSON.stringify({ fromLocationId, toLocationId, items: batch.map((b) => ({ productId: b.productId, quantity: Number(b.quantity) })) }),
+        body: JSON.stringify({
+          fromLocationId,
+          toLocationId,
+          items: batch.map((b) => ({ productId: b.productId, quantity: Number(b.quantity) })),
+          note: note.trim() || undefined,
+        }),
       })
-      setNotice(`Distributed ${batch.length} item${batch.length === 1 ? '' : 's'} to ${locations.find((l) => l.id === toLocationId)?.name ?? 'destination'}.`)
-      toast.success('Stock distributed.')
-      setBatch([])
-      await load()
+      onRecorded()
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : 'Could not distribute stock'
+      const message = cause instanceof Error ? cause.message : 'Could not record this transfer'
       setError(message)
       toast.error(message)
     } finally {
-      setSending(false)
+      setSaving(false)
     }
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8 sm:px-8 lg:px-10">
-      <header>
-        <p className="text-sm font-semibold text-secondary">Inventory</p>
-        <h1 className="mt-1 flex items-center gap-2 font-display text-3xl font-semibold"><LuTruck className="text-secondary" /> Distribute Stock</h1>
-        <p className="mt-2 max-w-xl text-sm text-muted-foreground">Move stock from the warehouse out to a selling point — Reception, the Gym, the Spa, wherever it's needed.</p>
-      </header>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/55 p-4 backdrop-blur-sm" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-sm border bg-card p-6 shadow-2xl">
+        <p className="text-sm font-semibold text-secondary">New stock transfer</p>
+        <h2 className="mt-1 font-display text-2xl font-semibold">Distribute stock</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Move several products from one location to another in one go — recorded as a single printable receipt.</p>
 
-      {error && <Msg error text={error} />}
-      {notice && <Msg text={notice} />}
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block text-sm font-medium">
+            From
+            <select className="input mt-1.5" value={fromLocationId} onChange={(e) => { setFromLocationId(e.target.value); setBatch([]) }}>
+              <option value="">Select source location</option>
+              {locations.map((l) => <option key={l.id} value={l.id} disabled={l.id === toLocationId}>{l.name}{l.type === 'STORE' ? ' (warehouse)' : ''}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm font-medium">
+            To
+            <select className="input mt-1.5" value={toLocationId} onChange={(e) => setToLocationId(e.target.value)}>
+              <option value="">Select destination location</option>
+              {locations.map((l) => <option key={l.id} value={l.id} disabled={l.id === fromLocationId}>{l.name}</option>)}
+            </select>
+          </label>
+        </div>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <label className="block text-sm font-medium">
-          From
-          <select className="input mt-1.5" value={fromLocationId} onChange={(e) => { setFromLocationId(e.target.value); setBatch([]) }}>
-            <option value="">Select source location</option>
-            {locations.map((l) => <option key={l.id} value={l.id} disabled={l.id === toLocationId}>{l.name}{l.type === 'STORE' ? ' (warehouse)' : ''}</option>)}
-          </select>
-        </label>
-        <label className="block text-sm font-medium">
-          To
-          <select className="input mt-1.5" value={toLocationId} onChange={(e) => setToLocationId(e.target.value)}>
-            <option value="">Select destination location</option>
-            {locations.map((l) => <option key={l.id} value={l.id} disabled={l.id === fromLocationId}>{l.name}</option>)}
-          </select>
-        </label>
-      </div>
-
-      {fromLocationId && toLocationId && (
-        <>
-          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {fromLocationId && toLocationId ? (
+          <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_280px]">
             <section>
               <label className="relative block">
                 <LuSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products at the source location…" className="w-full rounded-sm border bg-card py-2.5 pl-9 pr-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products at the source location…" className="w-full rounded-sm border bg-background py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring" />
               </label>
 
-              <div className="mt-4 overflow-hidden rounded-sm border bg-card shadow-sm">
+              <div className="mt-3 max-h-80 overflow-y-auto rounded-sm border">
                 {loading ? (
-                  <div className="p-16 text-center text-sm text-muted-foreground"><LuLoaderCircle className="mx-auto animate-spin" /></div>
+                  <div className="p-10 text-center text-sm text-muted-foreground"><LuLoaderCircle className="mx-auto animate-spin" /></div>
                 ) : visibleProducts.length === 0 ? (
-                  <div className="p-10 text-center text-sm text-muted-foreground">
+                  <div className="p-8 text-center text-sm text-muted-foreground">
                     <LuWarehouse className="mx-auto mb-2 size-6" />
                     No products with stock at this source location.
                   </div>
                 ) : (
                   <table className="w-full text-left text-sm">
-                    <thead className="bg-primary text-xs uppercase text-primary-foreground">
-                      <tr>
-                        <th className="px-4 py-3">Product</th>
-                        <th className="px-4 py-3">On hand</th>
-                        <th className="px-4 py-3">Send</th>
-                      </tr>
+                    <thead className="sticky top-0 bg-primary text-xs uppercase text-primary-foreground">
+                      <tr><th className="px-4 py-2.5">Product</th><th className="px-4 py-2.5">On hand</th><th className="px-4 py-2.5">Send</th></tr>
                     </thead>
                     <tbody>
                       {visibleProducts.map((product) => {
                         const max = availableAt(product)
                         const staged = batch.find((b) => b.productId === product.id)
                         return (
-                          <tr key={product.id} className="border-t">
-                            <td className="px-4 py-3 font-medium">{product.name}</td>
-                            <td className="px-4 py-3 text-muted-foreground">{max.toLocaleString()} {product.unit}</td>
-                            <td className="px-4 py-3">
+                          <tr key={product.id} className="border-t bg-card">
+                            <td className="px-4 py-2.5 font-medium">{product.name}</td>
+                            <td className="px-4 py-2.5 text-muted-foreground">{max.toLocaleString()} {product.unit}</td>
+                            <td className="px-4 py-2.5">
                               <input
                                 type="number" min="0" max={max} step="0.001"
                                 value={staged?.quantity ?? ''}
@@ -163,9 +364,14 @@ export default function InventoryWorkspace() {
                   </table>
                 )}
               </div>
+
+              <label className="mt-3 block text-sm font-medium">
+                Note <span className="font-normal text-muted-foreground">(optional)</span>
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. weekly restock" className="input mt-1.5" />
+              </label>
             </section>
 
-            <aside className="h-fit rounded-sm border bg-card p-4 shadow-sm">
+            <aside className="h-fit rounded-sm border bg-muted/20 p-4">
               <p className="flex items-center gap-2 text-sm font-semibold">
                 {locations.find((l) => l.id === fromLocationId)?.name} <LuArrowRight className="size-3.5 text-muted-foreground" /> {locations.find((l) => l.id === toLocationId)?.name}
               </p>
@@ -173,7 +379,7 @@ export default function InventoryWorkspace() {
                 {batch.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No items staged yet — enter a quantity next to a product.</p>
                 ) : batch.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between rounded-sm bg-muted/40 px-3 py-2 text-sm">
+                  <div key={item.productId} className="flex items-center justify-between rounded-sm bg-card px-3 py-2 text-sm shadow-sm">
                     <span className="truncate">{item.name}</span>
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{item.quantity} {item.unit}</span>
@@ -182,35 +388,28 @@ export default function InventoryWorkspace() {
                   </div>
                 ))}
               </div>
-              <button
-                disabled={batch.length === 0 || sending}
-                onClick={() => void sendDistribution()}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-sm bg-primary py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50"
-              >
-                {sending && <LuLoaderCircle className="animate-spin" />} Send {batch.length > 0 ? `${batch.length} item${batch.length === 1 ? '' : 's'}` : ''}
-              </button>
             </aside>
           </div>
-        </>
-      )}
+        ) : (
+          <div className="mt-5 flex min-h-40 flex-col items-center justify-center gap-2 rounded-sm border border-dashed p-10 text-center">
+            <LuWarehouse className="size-5 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Choose a source and destination location to pick products.</p>
+          </div>
+        )}
 
-      {(!fromLocationId || !toLocationId) && !loading && (
-        <div className="mt-7 flex min-h-64 flex-col items-center justify-center gap-3 rounded-sm border bg-card p-16 text-center shadow-sm">
-          <span className="flex size-12 items-center justify-center rounded-sm bg-secondary/10 text-secondary">
-            <LuWarehouse className="size-5" />
-          </span>
-          <p className="text-sm text-muted-foreground">Choose a source and destination location to begin.</p>
+        {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+        <div className="mt-6 flex justify-end gap-2 border-t pt-5">
+          <button type="button" onClick={onClose} className="rounded-sm border px-4 py-2.5 text-sm font-semibold hover:bg-muted">Cancel</button>
+          <button
+            disabled={batch.length === 0 || saving}
+            onClick={() => void record()}
+            className="inline-flex items-center gap-2 rounded-sm bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+          >
+            {saving && <LuLoaderCircle className="animate-spin" />} Record {batch.length > 0 ? `${batch.length} item${batch.length === 1 ? '' : 's'}` : ''}
+          </button>
         </div>
-      )}
-    </div>
-  )
-}
-
-function Msg({ text, error = false }: { text: string; error?: boolean }) {
-  return (
-    <div className={cn('mt-5 flex items-center gap-2 rounded-sm p-3 text-sm', error ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
-      {error ? <LuCircleAlert /> : <LuCircleCheck />}
-      {text}
+      </div>
     </div>
   )
 }
