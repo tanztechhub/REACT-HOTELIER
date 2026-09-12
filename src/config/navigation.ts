@@ -37,7 +37,6 @@ import {
   LuArrowLeftRight,
   LuCircleCheck,
   LuChartColumn,
-  LuChartBar,
   LuBuilding2,
   LuSettings,
   LuBriefcaseBusiness,
@@ -203,7 +202,6 @@ export const navigation: NavGroup[] = [
     section: 'REPORTS',
     items: [
       { label: 'Sales Report', href: '/reports', icon: LuChartColumn, moduleKey: 'REPORTS' },
-      { label: 'Inventory', href: '/reports/inventory', icon: LuChartBar },
       { label: 'Inventory Report', href: '/reports/inventory-report', icon: LuBoxes },
       { label: 'Products Report', href: '/reports/products-report', icon: LuTrendingUp },
       { label: 'Hotel', href: '/reports/hotel', icon: LuBuilding2 },
