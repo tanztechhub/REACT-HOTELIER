@@ -7,6 +7,7 @@ import {
 import { navigation } from '@/config/navigation'
 import { api } from '@/lib/api'
 import { useAppSelector } from '@/store/hooks'
+import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import StatCard from '@/components/ui/StatCard'
 import { cn } from '@/lib/utils'
 
@@ -19,9 +20,15 @@ function getGreeting() {
 
 const formatKes = (value: number) => `KSh ${value.toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 
-// ---- Super Admin dashboard — real, live data. Other roles keep the plain
-// "Your Modules" view below until their own dashboards are built (see
-// hotelier memory: this is being rolled out role by role). ----
+// ---- Revenue dashboard — real, live data, for the roles allowed to see
+// money (Super Admin, Manager — Accountant's turn is still pending; every
+// other role keeps the plain "Your Modules" view below until its own
+// dashboard is built — this is being rolled out role by role, see the
+// hotelier_dashboard_rollout memory). Scoped by whichever location(s) the
+// viewing employee is actually assigned to: a floating Super Admin with no
+// assignment sees the whole property by default (same as before), a Manager
+// pinned to one branch is locked to it, and one pinned to several gets a
+// picker restricted to just those — same convention as Receipts/Tables/POS. ----
 
 type Cards = { totalRevenue: number; netRevenue: number; totalExpenses: number; netProfit: number }
 type TopItem = { name: string; qty: number; revenue: number }
@@ -61,8 +68,12 @@ type TransactionRow = {
 
 const NON_FINAL_STATUSES = ['OPEN', 'PREPARING', 'READY', 'SERVED']
 const titleCase = (value: string) => value.charAt(0) + value.slice(1).toLowerCase().replaceAll('_', ' ')
+type LocationOption = { id: string; name: string }
 
-function SuperAdminDashboard() {
+function RevenueDashboard() {
+  const [locations, setLocations] = useState<LocationOption[]>([])
+  const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
+
   const [report, setReport] = useState<SalesReport | null>(null)
   const [activeOrderCount, setActiveOrderCount] = useState(0)
   const [tables, setTables] = useState<TableSummary[]>([])
@@ -74,24 +85,36 @@ function SuperAdminDashboard() {
     setLoading(true)
     setError('')
     try {
-      const [salesResponse, ordersResponse, tablesResponse, transactionsResponse] = await Promise.all([
-        api<SalesReport>('/reports/sales?period=day'),
-        api<{ orders: OrderSummary[] }>('/pos/orders?channel=FOOD'),
-        api<{ tables: TableSummary[] }>('/tables'),
-        api<{ transactions: TransactionRow[] }>('/transactions?limit=8'),
+      const locQuery = effectiveLocationId ? `&locationId=${effectiveLocationId}` : ''
+      const [salesResponse, ordersResponse, tablesResponse, transactionsResponse, locationResponse] = await Promise.all([
+        api<SalesReport>(`/reports/sales?period=day${locQuery}`),
+        api<{ orders: OrderSummary[] }>(`/pos/orders?channel=FOOD${locQuery}`),
+        api<{ tables: TableSummary[] }>(`/tables${effectiveLocationId ? `?locationId=${effectiveLocationId}` : ''}`),
+        api<{ transactions: TransactionRow[] }>(`/transactions?limit=8${locQuery}`),
+        api<{ locations: LocationOption[] }>('/locations'),
       ])
       setReport(salesResponse)
       setActiveOrderCount(ordersResponse.orders.filter((o) => NON_FINAL_STATUSES.includes(o.status)).length)
       setTables(tablesResponse.tables)
       setTransactions(transactionsResponse.transactions)
+      setLocations(locationResponse.locations)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not load the dashboard')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [effectiveLocationId])
 
   useEffect(() => { void load() }, [load])
+
+  const locationPicker = fixedLocation ? (
+    <span className="text-sm font-medium text-muted-foreground">{fixedLocation.name}</span>
+  ) : pickableLocations.length > 0 ? (
+    <select aria-label="Filter by location" value={selectedLocationId} onChange={(e) => setLocation(e.target.value)} className="input w-auto">
+      <option value="">All locations</option>
+      {pickableLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+    </select>
+  ) : null
 
   if (loading) {
     return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading today's overview…</div>
@@ -106,7 +129,8 @@ function SuperAdminDashboard() {
 
   return (
     <>
-      <section className="mt-7">
+      {locationPicker && <div className="mt-7 flex justify-end">{locationPicker}</div>}
+      <section className={locationPicker ? 'mt-3' : 'mt-7'}>
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Today's financial overview</p>
         <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard index={0} label="Total Revenue" value={formatKes(report.cards.totalRevenue)} icon={<LuWallet className="size-4" />} hint="Cash actually received" />
@@ -229,11 +253,10 @@ export default function Dashboard() {
   const user = useAppSelector((s) => s.auth.user)
   const moduleKeys = useAppSelector((s) => s.tenant.moduleKeys)
   const firstName = user?.firstName ?? 'there'
-  // Revenue and every figure derived from it is Super Admin only for now —
-  // Manager and Accountant get the same view once their own dashboards are
-  // planned (see hotelier_dashboard_rollout memory). Every other role keeps
-  // the plain module list below.
-  const isSuperAdmin = user?.role?.name === 'Super Admin'
+  // Revenue and every figure derived from it: Super Admin and Manager only
+  // so far — Accountant's turn is still pending (see hotelier_dashboard_
+  // rollout memory). Every other role keeps the plain module list below.
+  const hasRevenueAccess = user?.role?.name === 'Super Admin' || user?.role?.name === 'Manager'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -249,7 +272,7 @@ export default function Dashboard() {
         </p>
       </header>
 
-      {isSuperAdmin && <SuperAdminDashboard />}
+      {hasRevenueAccess && <RevenueDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
