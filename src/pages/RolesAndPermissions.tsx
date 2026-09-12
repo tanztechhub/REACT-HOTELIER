@@ -264,7 +264,15 @@ export default function RolesAndPermissions() {
             <div className="mt-5 space-y-4">
               <label className="block text-sm font-medium">
                 Role Name <span className="text-destructive">*</span>
-                <input required placeholder="e.g. Night Auditor" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input mt-1.5" />
+                <input
+                  required
+                  disabled={editing?.isSystemRole}
+                  placeholder="e.g. Night Auditor"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="input mt-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+                />
+                {editing?.isSystemRole && <span className="mt-1 block text-xs text-muted-foreground">System roles can't be renamed — other logic in the app relies on this exact name.</span>}
               </label>
               <label className="block text-sm font-medium">
                 Description
