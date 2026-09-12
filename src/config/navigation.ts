@@ -48,6 +48,8 @@ import {
   LuLayoutGrid,
   LuClock4,
   LuUserCheck,
+  LuBoxes,
+  LuTrendingUp,
 } from 'react-icons/lu'
 
 export const PERMISSION_SECTIONS = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
@@ -202,6 +204,8 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Sales Report', href: '/reports', icon: LuChartColumn, moduleKey: 'REPORTS' },
       { label: 'Inventory', href: '/reports/inventory', icon: LuChartBar },
+      { label: 'Inventory Report', href: '/reports/inventory-report', icon: LuBoxes },
+      { label: 'Products Report', href: '/reports/products-report', icon: LuTrendingUp },
       { label: 'Hotel', href: '/reports/hotel', icon: LuBuilding2 },
     ],
   },
