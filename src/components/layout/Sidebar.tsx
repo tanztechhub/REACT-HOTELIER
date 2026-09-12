@@ -115,7 +115,7 @@ export default function Sidebar({ className, mobile = false, onNavigate }: Sideb
       </div>
 
       {/* Nav */}
-      <nav className="scrollbar-thin flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
+      <nav className="scrollbar-none flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
         {visibleNavigation.map((group) => (
           <div key={group.label} className="mb-5 last:mb-0">
             <AnimatePresence initial={false}>
