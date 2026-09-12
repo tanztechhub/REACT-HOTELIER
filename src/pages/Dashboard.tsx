@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuCircleAlert, LuClipboardList, LuLoaderCircle, LuLock,
+  LuArrowDownLeft, LuArrowUpRight, LuBanknote, LuBedDouble, LuBellRing, LuCircleAlert, LuCircleCheck, LuClipboardList, LuLoaderCircle, LuLock,
   LuLogIn, LuLogOut, LuReceiptText, LuTable2, LuTrendingUp, LuTriangleAlert, LuUndo2, LuUsers, LuWallet,
 } from 'react-icons/lu'
 import { navigation } from '@/config/navigation'
@@ -501,6 +501,132 @@ function MiniCount({ label, value, cls }: { label: string; value: number; cls: s
   )
 }
 
+// ---- Waiter dashboard — their own orders only, no tenant-wide data. Waiter
+// holds none of the POS_VIEW_ALL_ORDERS/POS_APPROVE_* permissions, so
+// GET /pos/orders already scopes every one of these calls to createdBy ===
+// them server-side (canSeeAllOrders() in pos.routes.ts) — nothing extra to
+// filter here. "My Sales Today" is their own personal total, not the
+// business's aggregate revenue, so it's shown despite the no-revenue rule
+// for other roles (confirmed with the user). ----
+
+type WaiterOrderItem = { id: string; quantity: number }
+type WaiterOrder = { id: string; orderNumber: number; status: string; total: number; table: { label: string } | null; items: WaiterOrderItem[] }
+
+const WAITER_NON_FINAL = ['OPEN', 'PREPARING', 'READY', 'SERVED']
+
+function WaiterDashboard() {
+  const [activeOrders, setActiveOrders] = useState<WaiterOrder[]>([])
+  const [completedToday, setCompletedToday] = useState<WaiterOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [servingId, setServingId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const today = localIsoDay(new Date())
+      const [activeResponse, completedResponse] = await Promise.all([
+        api<{ orders: WaiterOrder[] }>('/pos/orders?channel=FOOD'),
+        api<{ orders: WaiterOrder[] }>(`/pos/orders?channel=FOOD&status=COMPLETED&from=${today}&to=${today}&limit=100`),
+      ])
+      setActiveOrders(activeResponse.orders.filter((o) => WAITER_NON_FINAL.includes(o.status)))
+      setCompletedToday(completedResponse.orders)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not load your orders')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  async function serveNow(orderId: string) {
+    setServingId(orderId)
+    try {
+      await api(`/pos/orders/${orderId}/serve`, { method: 'PATCH' })
+      void load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not mark the order served')
+    } finally {
+      setServingId(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="mt-7 flex min-h-64 items-center justify-center gap-2 text-sm text-muted-foreground"><LuLoaderCircle className="animate-spin" /> Loading your orders…</div>
+  }
+
+  const readyOrders = activeOrders.filter((o) => o.status === 'READY')
+  const otherActive = activeOrders.filter((o) => o.status !== 'READY')
+  const salesToday = completedToday.reduce((s, o) => s + o.total, 0)
+  const itemCount = (o: WaiterOrder) => o.items.reduce((s, i) => s + i.quantity, 0)
+
+  return (
+    <>
+      {error && <div className="mt-5 flex items-center gap-2 rounded-sm border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive"><LuCircleAlert />{error}</div>}
+
+      <section className="mt-7">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My shift</p>
+        <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard index={0} label="My Active Orders" value={String(activeOrders.length)} icon={<LuClipboardList className="size-4" />} />
+          <StatCard tone="warn" label="Ready to Serve" value={String(readyOrders.length)} icon={<LuBellRing className="size-4" />} hint={readyOrders.length > 0 ? 'Waiting on you' : undefined} />
+          <StatCard index={1} label="Completed Today" value={String(completedToday.length)} icon={<LuCircleCheck className="size-4" />} />
+          <StatCard index={2} label="My Sales Today" value={formatKes(salesToday)} icon={<LuWallet className="size-4" />} />
+        </div>
+      </section>
+
+      {readyOrders.length > 0 && (
+        <section className="mt-6 rounded-lg border-2 border-destructive/40 bg-destructive/5 p-2.5">
+          <p className="mb-2 flex items-center gap-1.5 px-0.5 text-[11px] font-bold uppercase tracking-wider text-destructive">
+            <LuBellRing className="size-3.5" /> Ready to serve · {readyOrders.length}
+          </p>
+          <div className="space-y-2">
+            {readyOrders.map((order) => (
+              <div key={order.id} className="flex items-center gap-2 rounded-sm border bg-card p-2.5 shadow-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold">Order #{order.orderNumber}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{itemCount(order)} item{itemCount(order) === 1 ? '' : 's'} · {order.table?.label ?? 'Takeaway'}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-destructive px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive-foreground">Pending</span>
+                <button
+                  disabled={servingId === order.id}
+                  onClick={() => void serveNow(order.id)}
+                  className="shrink-0 rounded-sm bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground disabled:opacity-60"
+                >
+                  {servingId === order.id ? <LuLoaderCircle className="size-3.5 animate-spin" /> : 'Serve Now'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mt-6 overflow-hidden rounded-sm border bg-card">
+        <header className="flex items-center justify-between border-b p-4">
+          <h2 className="font-semibold">My Other Active Orders</h2>
+          <Link to="/pos" className="text-xs font-semibold text-secondary hover:underline">Open POS →</Link>
+        </header>
+        {otherActive.length === 0 ? (
+          <p className="p-6 text-center text-sm text-muted-foreground">Nothing else in progress right now.</p>
+        ) : (
+          <div className="divide-y">
+            {otherActive.map((o) => (
+              <div key={o.id} className="flex items-center gap-3 p-3.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">Order #{o.orderNumber}</p>
+                  <p className="text-xs text-muted-foreground">{itemCount(o)} item{itemCount(o) === 1 ? '' : 's'} · {o.table?.label ?? 'Takeaway'}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-warning/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-warning">{o.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  )
+}
+
 export default function Dashboard() {
   const allModules = navigation.flatMap((g) => g.items).filter((i) => i.moduleKey)
   const user = useAppSelector((s) => s.auth.user)
@@ -513,6 +639,7 @@ export default function Dashboard() {
   const roleName = user?.role?.name
   const revenueVariant = roleName === 'Super Admin' || roleName === 'Manager' ? 'operations' : roleName === 'Accountant' ? 'finance' : null
   const isReceptionist = roleName === 'Receptionist'
+  const isWaiter = roleName === 'Waiter'
 
   return (
     <div className="mx-auto max-w-7xl px-6 py-8 sm:px-8 lg:px-10">
@@ -530,6 +657,7 @@ export default function Dashboard() {
 
       {revenueVariant && <RevenueDashboard variant={revenueVariant} />}
       {isReceptionist && <ReceptionDashboard />}
+      {isWaiter && <WaiterDashboard />}
 
       <section className="mt-8 rounded-sm border border-border bg-card p-6 shadow-sm">
         <div className="mb-5 flex items-center justify-between">
