@@ -13,3 +13,18 @@ export function setSessionSnapshot(snapshot: SessionSnapshot) {
 export function getSessionSnapshot(): SessionSnapshot {
   return current
 }
+
+// Same decoupling trick as the snapshot above: api.ts detects a shift-window
+// rejection from the server (a continuous check, not just at login — an
+// already-open session stops working the moment a shift ends) and needs to
+// force a logout, but can't import the Redux store directly without a
+// circular import. The store registers a handler once, at boot.
+let outsideShiftHandler: (() => void) | null = null
+
+export function setOutsideShiftHandler(handler: (() => void) | null) {
+  outsideShiftHandler = handler
+}
+
+export function notifyOutsideShift() {
+  outsideShiftHandler?.()
+}

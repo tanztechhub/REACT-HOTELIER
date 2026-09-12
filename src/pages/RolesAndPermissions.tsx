@@ -22,12 +22,15 @@ import { PERMISSION_SECTIONS as sections, sectionLabels, type PermissionSection 
 // hide sidebar/routes client-side. These are checked by the server on the
 // specific actions they name, so unlike a section they actually reject a
 // request.
-type Capability = 'POS_APPROVE_CANCELLATION' | 'POS_APPROVE_COUNTER' | 'POS_VIEW_ALL_ORDERS'
-const capabilities: Capability[] = ['POS_APPROVE_CANCELLATION', 'POS_APPROVE_COUNTER', 'POS_VIEW_ALL_ORDERS']
+type Capability = 'POS_APPROVE_CANCELLATION' | 'POS_APPROVE_COUNTER' | 'POS_VIEW_ALL_ORDERS' | 'SHIFT_MANAGE' | 'ATTENDANCE_MANAGE' | 'SHIFT_EXEMPT'
+const capabilities: Capability[] = ['POS_APPROVE_CANCELLATION', 'POS_APPROVE_COUNTER', 'POS_VIEW_ALL_ORDERS', 'SHIFT_MANAGE', 'ATTENDANCE_MANAGE', 'SHIFT_EXEMPT']
 const capabilityLabels: Record<Capability, { label: string; hint: string }> = {
   POS_APPROVE_CANCELLATION: { label: 'Approve order cancellations', hint: 'Decide a waiter’s cancellation request (Sales ▸ Approvals) — approve or reject it.' },
   POS_APPROVE_COUNTER: { label: 'Approve counter orders', hint: 'Mark an order served at a Counter-mode location (Locations ▸ Order Handling) — the counter’s approval step.' },
   POS_VIEW_ALL_ORDERS: { label: 'See every order at a location', hint: 'Without this, Active Orders / Completed / Cancelled only show the orders this role’s own employees rang up. Also implied by the two capabilities above.' },
+  SHIFT_MANAGE: { label: 'Manage shifts and rotations', hint: 'Create/edit shift templates (Team ▸ Shifts) and assign or change an employee’s rotation.' },
+  ATTENDANCE_MANAGE: { label: 'Mark attendance', hint: 'Record an employee as present, absent, late, or on leave for a day (Team ▸ Attendance).' },
+  SHIFT_EXEMPT: { label: 'Sign in outside shift hours', hint: 'This role can use the system anytime, regardless of any employee’s assigned shift — for owners/managers/accountants who aren’t shift workers. A Super Admin always has this, implicitly.' },
 }
 
 type Role = {

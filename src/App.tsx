@@ -19,6 +19,8 @@ import BusinessInformation from "@/pages/BusinessInformation";
 import Employees from "@/pages/Employees";
 import Departments from "@/pages/Departments";
 import RolesAndPermissions from "@/pages/RolesAndPermissions";
+import Shifts from "@/pages/Shifts";
+import Attendance from "@/pages/Attendance";
 import Categories from "@/pages/Categories";
 import Recipes from "@/pages/Recipes";
 import MenuCategories from "@/pages/MenuCategories";
@@ -59,8 +61,9 @@ import {
   type PermissionSection,
 } from "@/config/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { restoreSession } from "@/store/authSlice";
+import { logout, restoreSession } from "@/store/authSlice";
 import { fetchTenantContext, resolveTenant } from "@/store/tenantSlice";
+import { setOutsideShiftHandler } from "@/lib/session";
 
 const moduleRoutes = navigation
   .flatMap((g) => g.items)
@@ -116,6 +119,14 @@ function App() {
     // Resolve the workspace (subdomain -> tenant) exactly once, on boot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // Any API call — not just login — can come back rejected because the
+    // signed-in employee's shift has ended; force them back to the login
+    // screen the same way an expired session does.
+    setOutsideShiftHandler(() => void dispatch(logout()));
+    return () => setOutsideShiftHandler(null);
+  }, [dispatch]);
 
   useEffect(() => {
     if (resolved && !resolveError && token) void dispatch(restoreSession());
@@ -246,6 +257,8 @@ function App() {
           path="/team/roles-permissions"
           element={<RolesAndPermissions />}
         />
+        <Route path="/team/shifts" element={<Shifts />} />
+        <Route path="/team/attendance" element={<Attendance />} />
         {moduleRoutes.map((item) => (
           <Route
             key={item.href}

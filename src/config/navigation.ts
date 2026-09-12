@@ -47,6 +47,8 @@ import {
   LuHistory,
   LuNetwork,
   LuLayoutGrid,
+  LuClock4,
+  LuUserCheck,
 } from 'react-icons/lu'
 
 export const PERMISSION_SECTIONS = ['OVERVIEW', 'RECEPTION', 'HOUSEKEEPING', 'SALES', 'KITCHEN', 'SERVICE_CENTER', 'INVENTORY', 'TEAM', 'FINANCE', 'REPORTS', 'SYSTEM'] as const
@@ -182,6 +184,8 @@ export const navigation: NavGroup[] = [
       { label: 'Employees', href: '/team/employees', icon: LuUsers, moduleKey: 'HR' },
       { label: 'Departments', href: '/team/departments', icon: LuNetwork },
       { label: 'Roles and Permissions', href: '/team/roles-permissions', icon: LuShieldCheck },
+      { label: 'Shifts', href: '/team/shifts', icon: LuClock4, moduleKey: 'HR' },
+      { label: 'Attendance', href: '/team/attendance', icon: LuUserCheck, moduleKey: 'HR' },
     ],
   },
   {
