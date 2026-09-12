@@ -48,7 +48,7 @@ type Location = { id: string; name: string }
 
 const num = (v: string | null) => (v == null ? null : Number(v))
 const fmtQty = (v: number) => v.toLocaleString('en-KE', { maximumFractionDigits: 3 })
-const money = (v: number) => `KES ${v.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const money = (v: number) => `KSh ${v.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const THIS_YEAR = new Date().getFullYear()
 const YEARS = Array.from({ length: 6 }, (_, i) => THIS_YEAR - i)
 

@@ -384,7 +384,7 @@ export default function Products() {
                         {low && <span className="ml-2 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-semibold text-warning">Low</span>}
                         {!product.isActive && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Inactive</span>}
                       </td>
-                      <td className="px-5 py-4 text-muted-foreground">{product.unitCost ? `KES ${Number(product.unitCost).toLocaleString()}` : '—'}</td>
+                      <td className="px-5 py-4 text-muted-foreground">{product.unitCost ? `KSh ${Number(product.unitCost).toLocaleString()}` : '—'}</td>
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1">
                           <button onClick={() => openTransfer(product)} title="Transfer stock" className="rounded-sm p-2 text-muted-foreground hover:bg-accent/10 hover:text-accent"><LuArrowLeftRight /></button>

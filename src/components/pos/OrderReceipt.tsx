@@ -46,7 +46,7 @@ export type ReceiptProfile = { businessName: string; address: string | null; cit
 
 import { receiptFooterText, receiptHeaderText, receiptPhone, servedByName, showsTaxAsAddedOn } from '@/lib/receiptFields'
 
-const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const formatKes = (value: number | string) => `KSh ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 export default function OrderReceipt({ order, profile }: { order: ReceiptOrder; profile: ReceiptProfile }) {
   const phone = receiptPhone(order, profile)

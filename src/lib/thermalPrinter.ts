@@ -209,7 +209,7 @@ async function sendBridge(bytes: Uint8Array, s: ThermalSettings): Promise<void> 
 
 // ---------------------------------------------------------------- receipt bytes
 
-const money = (v: number | string) => `KES ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const money = (v: number | string) => `KSh ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 /**
  * Centers by literal space-padding instead of the encoder's own

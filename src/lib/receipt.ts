@@ -1,7 +1,7 @@
 import type { ReceiptOrder, ReceiptProfile } from '@/components/pos/OrderReceipt'
 import { receiptFooterText, receiptHeaderText, receiptPhone, servedByName, showsTaxAsAddedOn } from '@/lib/receiptFields'
 
-const money = (v: number | string) => `KES ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const money = (v: number | string) => `KSh ${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const RULE = '--------------------------------'
 
 /** The receipt as a plain-text block for a WhatsApp / SMS / share message. */
