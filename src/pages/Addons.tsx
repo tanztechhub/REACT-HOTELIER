@@ -3,10 +3,12 @@ import type { FormEvent, ReactNode } from 'react'
 import { LuCircleAlert, LuImageOff, LuLoaderCircle, LuPencil, LuPlus, LuPower, LuSearch, LuTrash2 } from 'react-icons/lu'
 import { api } from '@/lib/api'
 import Button from '@/components/ui/Button'
+import SearchableSelect from '@/components/ui/SearchableSelect'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
 type MenuCategory = { id: string; name: string; isActive: boolean }
+type StockProduct = { id: string; name: string; unit: string; packSize: string | null; packLabel: string | null; packUnit: { id: string; name: string } | null }
 type Addon = {
   id: string
   name: string
@@ -16,11 +18,24 @@ type Addon = {
   imageUrl: string | null
   menuCategoryId: string | null
   menuCategory: { id: string; name: string } | null
+  stockProductId: string | null
+  stockQtyPerUnit: string | null
+  stockProduct: StockProduct | null
   isActive: boolean
   _count: { orderItems: number }
 }
-type Form = { name: string; description: string; price: string; sku: string; imageUrl: string; menuCategoryId: string; isActive: boolean }
-const emptyForm: Form = { name: '', description: '', price: '', sku: '', imageUrl: '', menuCategoryId: '', isActive: true }
+type StockMode = 'none' | 'product'
+type Form = { name: string; description: string; price: string; sku: string; imageUrl: string; menuCategoryId: string; isActive: boolean; stockMode: StockMode; stockProductId: string; stockQtyPerUnit: string }
+const emptyForm: Form = { name: '', description: '', price: '', sku: '', imageUrl: '', menuCategoryId: '', isActive: true, stockMode: 'none', stockProductId: '', stockQtyPerUnit: '' }
+
+// "750 ml bottle" / "500 ml can" — what one unit of a pack-tracked product
+// actually is, so picking a quantity per sale means something. Mirrors
+// MenuItems.tsx's own packHint (kept local there too — small enough not to
+// be worth sharing).
+function packHint(p: StockProduct): string | undefined {
+  if (!p.packSize || !p.packUnit) return undefined
+  return `1 ${p.packLabel || 'pack'} = ${Number(p.packSize).toLocaleString()} ${p.packUnit.name}`
+}
 
 const money = (v: string | number) => `KSh ${Number(v).toLocaleString('en-KE', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 
@@ -28,6 +43,7 @@ export default function Addons() {
   const toast = useToast()
   const [addons, setAddons] = useState<Addon[]>([])
   const [categories, setCategories] = useState<MenuCategory[]>([])
+  const [stockProducts, setStockProducts] = useState<StockProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -55,7 +71,13 @@ export default function Addons() {
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     api<{ categories: MenuCategory[] }>('/menu-categories').then((r) => setCategories(r.categories)).catch(() => {})
+    api<{ products: StockProduct[] }>('/products?active=true').then((r) => setStockProducts(r.products)).catch(() => {})
   }, [])
+
+  const stockProductOptions = useMemo(
+    () => stockProducts.map((p) => ({ value: p.id, label: p.name, hint: packHint(p) ?? p.unit })),
+    [stockProducts],
+  )
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -68,7 +90,12 @@ export default function Addons() {
   function openCreate() { setEditing(null); setForm(emptyForm); setShowForm(true) }
   function openEdit(a: Addon) {
     setEditing(a)
-    setForm({ name: a.name, description: a.description ?? '', price: String(Number(a.price)), sku: a.sku ?? '', imageUrl: a.imageUrl ?? '', menuCategoryId: a.menuCategoryId ?? '', isActive: a.isActive })
+    setForm({
+      name: a.name, description: a.description ?? '', price: String(Number(a.price)), sku: a.sku ?? '', imageUrl: a.imageUrl ?? '', menuCategoryId: a.menuCategoryId ?? '', isActive: a.isActive,
+      stockMode: a.stockProductId ? 'product' : 'none',
+      stockProductId: a.stockProductId ?? '',
+      stockQtyPerUnit: a.stockQtyPerUnit != null ? String(Number(a.stockQtyPerUnit)) : '',
+    })
     setShowForm(true)
   }
 
@@ -85,6 +112,8 @@ export default function Addons() {
         imageUrl: form.imageUrl.trim() || undefined,
         menuCategoryId: form.menuCategoryId || null,
         isActive: form.isActive,
+        stockProductId: form.stockMode === 'product' ? form.stockProductId || null : null,
+        stockQtyPerUnit: form.stockMode === 'product' && form.stockQtyPerUnit !== '' ? Number(form.stockQtyPerUnit) : null,
       }
       await api(editing ? `/addons/${editing.id}` : '/addons', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
       toast.success(editing ? 'Add-on updated.' : 'Add-on created.')
@@ -192,6 +221,11 @@ export default function Addons() {
                       <p className="max-w-sm truncate text-xs text-muted-foreground">
                         {[a.sku && `SKU ${a.sku}`, a.description].filter(Boolean).join(' · ') || <span className="italic">no details</span>}
                       </p>
+                      {a.stockProduct ? (
+                        <p className="mt-0.5 text-xs font-medium text-secondary">→ {Number(a.stockQtyPerUnit ?? 1)} {a.stockProduct.packUnit?.name ?? a.stockProduct.unit} of {a.stockProduct.name}</p>
+                      ) : (
+                        <p className="mt-0.5 text-xs italic text-warning">No stock impact</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{a.menuCategory?.name ?? <span className="italic text-xs">Any</span>}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-medium">{money(a.price)}</td>
@@ -243,6 +277,41 @@ export default function Addons() {
                 </select>
                 <span className="mt-1 block text-xs text-muted-foreground">The POS add-on picker opens filtered to the menu item's category.</span>
               </Field>
+              <Field label="Stock deduction">
+                <select className="input" value={form.stockMode} onChange={(e) => setForm({ ...form, stockMode: e.target.value as StockMode })}>
+                  <option value="none">Doesn't affect stock</option>
+                  <option value="product">Consumes a set amount of one product</option>
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">e.g. "Extra Red Bull" consuming 1 can, or "Double shot" consuming 25ml of the same spirit. Without this link, this add-on never touches stock — model mixers/extra pours here, not as a bare add-on.</span>
+              </Field>
+              {form.stockMode === 'product' && (
+                <>
+                  <Field label="Product">
+                    <SearchableSelect
+                      options={stockProductOptions}
+                      value={form.stockProductId}
+                      onChange={(value) => setForm({ ...form, stockProductId: value })}
+                      placeholder="Select a product"
+                      searchPlaceholder="Search products…"
+                      emptyText="No products match."
+                    />
+                  </Field>
+                  <Field label="Consumes per sale">
+                    <input
+                      type="number" min="0" step="0.001" placeholder="e.g. 1"
+                      value={form.stockQtyPerUnit}
+                      onChange={(e) => setForm({ ...form, stockQtyPerUnit: e.target.value })}
+                      className="input"
+                    />
+                    {(() => {
+                      const p = stockProducts.find((x) => x.id === form.stockProductId)
+                      if (!p) return null
+                      const hint = packHint(p)
+                      return <span className="mt-1 block text-xs text-muted-foreground">In {p.packUnit?.name ?? p.unit}{hint ? ` — ${hint}` : ''}</span>
+                    })()}
+                  </Field>
+                </>
+              )}
               <Field label="Description"><input placeholder="Optional" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input" /></Field>
               <Field label="Image URL">
                 <input type="url" placeholder="https://…" value={form.imageUrl} onChange={(e) => setForm({ ...form, imageUrl: e.target.value })} className="input" />

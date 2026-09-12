@@ -594,14 +594,9 @@ export default function PointOfSale() {
                       <p className="mt-2 text-lg font-bold">{formatKes(order.total)}</p>
                       {owed > 0.01 && <p className="text-xs font-semibold text-warning">Owing {formatKes(owed)} · paid {formatKes(order.paid)}</p>}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <button onClick={() => setReceiptOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-xs font-semibold hover:bg-muted">
-                          <LuReceiptText className="size-3.5" /> View receipt
+                        <button onClick={() => setSettlementOrderId(order.id)} className={cn('inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-xs font-semibold', owed > 0.01 ? 'bg-primary text-primary-foreground' : 'border hover:bg-muted')}>
+                          <LuReceiptText className="size-3.5" /> {owed > 0.01 ? 'Take payment' : 'View receipt'}
                         </button>
-                        {owed > 0.01 && (
-                          <button onClick={() => setSettlementOrderId(order.id)} className="inline-flex items-center gap-1.5 rounded-sm bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
-                            Take payment
-                          </button>
-                        )}
                       </div>
                     </article>
                   )

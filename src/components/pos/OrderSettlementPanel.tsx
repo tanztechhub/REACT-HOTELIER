@@ -23,7 +23,20 @@ type Order = ReceiptOrder & {
   reservation: CheckedInStay | null
 }
 
-const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
+const formatKes = (value: number | string) => `KSh ${Number(value).toLocaleString()}`
+
+// Mirrors the server's RETURN_WINDOW_MS (pos.routes.ts) purely for this
+// hint — the real cutoff is enforced server-side regardless of what the
+// client thinks, so this can never be a security check, just a label.
+const RETURN_WINDOW_MS = 60 * 60 * 1000
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  const hrs = Math.floor(mins / 60)
+  return `${hrs} h ${mins % 60} min ago`
+}
 
 /** The full "view a served order, print/preview the bill, settle it (cash
  * now or charged to a checked-in guest's room), or cancel it before serving"
@@ -274,11 +287,22 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
               </div>
 
               {order.status === 'PENDING_CANCELLATION' ? (
-                <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 p-3 text-center text-xs font-semibold text-warning">Cancellation requested — waiting for an admin to approve.</p>
-              ) : !['COMPLETED', 'CANCELLED'].includes(order.status) && (
-                cancelOpen ? (
+                <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 p-3 text-center text-xs font-semibold text-warning">
+                  {order.servedAt ? 'Return' : 'Cancellation'} requested — waiting for approval.
+                </p>
+              ) : order.status === 'CANCELLED' ? null : (() => {
+                const isReturn = order.status === 'SERVED' || order.status === 'COMPLETED'
+                const withinWindow = !order.servedAt || Date.now() - new Date(order.servedAt).getTime() <= RETURN_WINDOW_MS
+                if (isReturn && !withinWindow) {
+                  return (
+                    <p className="mt-2 rounded-sm border border-dashed p-3 text-center text-xs text-muted-foreground">
+                      Returns are only allowed within 1 hour of being served — this one was served {timeAgo(order.servedAt!)}.
+                    </p>
+                  )
+                }
+                return cancelOpen ? (
                   <div className="mt-2 space-y-2 rounded-sm border border-destructive/30 p-3">
-                    <label className="block text-xs font-semibold text-destructive">Reason for cancelling</label>
+                    <label className="block text-xs font-semibold text-destructive">Reason for {isReturn ? 'the return' : 'cancelling'}</label>
                     <textarea
                       autoFocus rows={2} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
                       placeholder="e.g. customer left, wrong order rung up…"
@@ -292,9 +316,11 @@ export default function OrderSettlementPanel({ orderId, title, subtitle, profile
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setCancelOpen(true)} className="mt-2 w-full rounded-sm border border-destructive/30 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10">Request cancellation</button>
+                  <button onClick={() => setCancelOpen(true)} className="mt-2 w-full rounded-sm border border-destructive/30 py-2.5 text-sm font-semibold text-destructive hover:bg-destructive/10">
+                    {isReturn ? `Request return · ${timeAgo(order.servedAt!)}` : 'Request cancellation'}
+                  </button>
                 )
-              )}
+              })()}
 
               {(order.status === 'SERVED' || order.status === 'COMPLETED') && remaining > 0.01 && (
                 <form onSubmit={settle} className="mt-5 space-y-3 border-t pt-5">

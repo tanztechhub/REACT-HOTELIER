@@ -7,7 +7,6 @@ import { useWorkingLocation } from '@/lib/useWorkingLocation'
 import StatCard from '@/components/ui/StatCard'
 import { type ReceiptOrder, type ReceiptProfile } from '@/components/pos/OrderReceipt'
 import OrderSettlementPanel from '@/components/pos/OrderSettlementPanel'
-import ReceiptPreviewModal from '@/components/pos/ReceiptPreviewModal'
 
 type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID'
 type ReceiptRow = ReceiptOrder & { total: number; paid: number; paymentStatus?: PaymentStatus }
@@ -25,7 +24,7 @@ type StatusFilter = 'ALL' | 'COMPLETED' | 'CANCELLED'
 // narrower date range (below) is the intended way to reach further back.
 const FETCH_LIMIT = 100
 
-const formatKes = (value: number | string) => `KES ${Number(value).toLocaleString()}`
+const formatKes = (value: number | string) => `KSh ${Number(value).toLocaleString()}`
 
 const badgeFor = (row: ReceiptRow) => {
   if (row.status === 'CANCELLED') return { label: 'Cancelled', cls: 'bg-destructive/10 text-destructive' }
@@ -54,8 +53,7 @@ export default function Receipts() {
   const [dateTo, setDateTo] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [receiptId, setReceiptId] = useState<string | null>(null)
-  const [payId, setPayId] = useState<string | null>(null)
+  const [manageId, setManageId] = useState<string | null>(null)
 
   const { fixed: fixedLocation, options: pickableLocations, selectedId: selectedLocationId, setLocation, effectiveId: effectiveLocationId } = useWorkingLocation(locations, { persist: false })
 
@@ -215,7 +213,7 @@ export default function Receipts() {
                   const badge = badgeFor(order)
                   const owed = Math.max(0, order.total - order.paid)
                   return (
-                    <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setReceiptId(order.id)}>
+                    <tr key={order.id} className="cursor-pointer border-t transition hover:bg-muted/30" onClick={() => setManageId(order.id)}>
                       <td className="px-5 py-4 font-semibold">#{order.orderNumber}</td>
                       <td className="px-5 py-4 text-muted-foreground">{order.table?.label ?? 'Takeaway'}</td>
                       <td className="px-5 py-4 text-muted-foreground">{new Date(order.updatedAt).toLocaleString()}</td>
@@ -228,9 +226,9 @@ export default function Receipts() {
                       <td className="px-5 py-4">
                         <div className="flex justify-end gap-1">
                           {order.status !== 'CANCELLED' && owed > 0.01 && (
-                            <button onClick={(e) => { e.stopPropagation(); setPayId(order.id) }} title="Take payment" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuWallet /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setManageId(order.id) }} title="Take payment" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuWallet /></button>
                           )}
-                          <button onClick={(e) => { e.stopPropagation(); setReceiptId(order.id) }} title="View receipt" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
+                          <button onClick={(e) => { e.stopPropagation(); setManageId(order.id) }} title="View receipt / request a return" className="rounded-sm p-2 text-muted-foreground hover:bg-secondary/10 hover:text-secondary"><LuReceiptText /></button>
                         </div>
                       </td>
                     </tr>
@@ -242,17 +240,13 @@ export default function Receipts() {
         </section>
       )}
 
-      {receiptId && (
-        <ReceiptPreviewModal orderId={receiptId} profile={profile} onClose={() => setReceiptId(null)} />
-      )}
-
-      {payId && (
+      {manageId && (
         <OrderSettlementPanel
-          orderId={payId}
-          title="Take payment"
+          orderId={manageId}
+          title="Receipt"
           profile={profile}
           paymentMethods={paymentMethods}
-          onClose={() => setPayId(null)}
+          onClose={() => setManageId(null)}
           onChanged={() => void load()}
         />
       )}
