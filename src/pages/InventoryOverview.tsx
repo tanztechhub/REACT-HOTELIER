@@ -173,17 +173,17 @@ export default function InventoryOverview() {
                         </thead>
                         <tbody>
                           {rows.map((p) => (
-                            <tr key={p.productId} className="border-t">
+                            <tr key={p.productId} className={cn('border-t', p.out && 'bg-destructive/5')}>
                               <td className="px-4 py-3">{p.name}</td>
                               <td className="px-4 py-3 text-muted-foreground">{p.sku ?? '—'}</td>
                               <td className="px-4 py-3 text-muted-foreground">{p.category ?? '—'}</td>
                               <td className="px-4 py-3 text-right tabular-nums">
-                                {p.quantity.toLocaleString()}
-                                {p.out && <span className="ml-1.5 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">Out</span>}
+                                <span className={cn(p.out && 'font-semibold text-destructive')}>{p.quantity.toLocaleString()}</span>
+                                {p.out && <span className="ml-1.5 rounded-full bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">Out of stock</span>}
                                 {!p.out && p.low && <span className="ml-1.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-warning">Low</span>}
                               </td>
                               <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatKes(p.unitCost)}</td>
-                              <td className="px-4 py-3 text-right font-semibold tabular-nums">{formatKes(p.value)}</td>
+                              <td className={cn('px-4 py-3 text-right font-semibold tabular-nums', p.out && 'text-destructive')}>{formatKes(p.value)}</td>
                               <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{loc.stockValue > 0 ? ((p.value / loc.stockValue) * 100).toFixed(1) : '0.0'}%</td>
                             </tr>
                           ))}
